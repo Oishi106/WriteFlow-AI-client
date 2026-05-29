@@ -1,0 +1,1 @@
+export { NewsletterSection as default } from './PopularTemplates';
