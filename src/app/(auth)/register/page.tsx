@@ -31,9 +31,9 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      await registerUser(data.name, data.email, data.password);
+      const user = await registerUser(data.name, data.email, data.password);
       toast({ title: 'Account created!', description: 'Welcome to WriteFlow AI.' });
-      router.push('/dashboard');
+      router.push(user?.role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Registration failed.';
       toast({ title: 'Error', description: message, variant: 'destructive' });

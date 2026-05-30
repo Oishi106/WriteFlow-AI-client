@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Zap, Loader2 } from 'lucide-react';
+import { Chrome, Eye, EyeOff, Zap, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 
@@ -34,9 +35,8 @@ export default function LoginPage() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      await login(data.email, data.password);
+      const user = await login(data.email, data.password);
       toast({ title: 'Welcome back!', description: 'Login successful.' });
-      const { user } = useAuthStore.getState();
       router.push(user?.role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Login failed. Please try again.';
@@ -81,6 +81,15 @@ export default function LoginPage() {
             <h1 className="font-display text-3xl font-bold mb-2">Welcome back</h1>
             <p className="text-muted-foreground">Sign in to your account to continue writing.</p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => void signIn('google', { callbackUrl: '/dashboard' })}
+            className="w-full mb-4 py-3 bg-white text-slate-900 font-semibold rounded-xl transition-colors hover:bg-slate-100 flex items-center justify-center gap-2 shadow-sm"
+          >
+            <Chrome className="w-4 h-4" />
+            Continue with Google
+          </button>
 
           {/* Demo Buttons */}
           <div className="flex gap-3 mb-6">
