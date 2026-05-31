@@ -1,141 +1,383 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Search, Plus, FileText, Clock, Filter } from 'lucide-react';
-import { aiApi } from '@/lib/api';
-import { formatRelativeTime } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { Pencil, Search, Trash2, X, FileText, AlertTriangle } from 'lucide-react';
+import { documentsApi } from '@/lib/api';
+import { formatDate } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 
-interface AILog {
+type DocumentItem = {
   _id: string;
-  agentUsed: string;
-  promptSnippet: string;
-  tokensUsed: number;
-  createdAt: string;
-}
+  title: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  wordCount?: number;
+  updatedAt: string;
+};
 
-const STATUS_TABS = ['All', 'Draft', 'Published', 'Archived'];
+type Meta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+const STATUS_TABS = [
+  { value: 'all', label: 'All' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'PUBLISHED', label: 'Published' },
+  { value: 'ARCHIVED', label: 'Archived' },
+];
+
+const statusColors: Record<string, string> = {
+  DRAFT: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+  PUBLISHED: 'bg-green-500/10 text-green-700 dark:text-green-400',
+  ARCHIVED: 'bg-gray-500/10 text-gray-600 dark:text-gray-400',
+};
 
 export default function DocumentsPage() {
-  const [logs, setLogs] = useState<AILog[]>([]);
-  const [meta, setMeta] = useState<{ total: number; totalPages: number } | null>(null);
+  const { toast } = useToast();
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [meta, setMeta] = useState<Meta | null>(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [error, setError] = useState(false);
   const [page, setPage] = useState(1);
-  const [activeStatus, setActiveStatus] = useState('All');
+  const [status, setStatus] = useState('all');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const fetchLogs = useCallback(async () => {
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
+  const fetchDocuments = async () => {
     setLoading(true);
+    setError(false);
+    const params: Record<string, string | number> = { page, limit: 10 };
+    const normalizedStatus = status.trim();
+    if (normalizedStatus && normalizedStatus.toLowerCase() !== 'all') {
+      params.status = normalizedStatus.toUpperCase();
+    }
+    if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+
     try {
-      const { data } = await aiApi.getHistory({ page, limit: 10 });
-      setLogs(data.data);
-      setMeta(data.meta);
-    } catch { setLogs([]); }
-    finally { setLoading(false); }
-  }, [page]);
-
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
-
-  const filtered = logs.filter(l =>
-    search === '' || l.promptSnippet.toLowerCase().includes(search.toLowerCase()) || l.agentUsed.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const agentColors: Record<string, string> = {
-    'Content Draft': 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-    'Rewrite & Tone': 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
-    'Chat Assistant': 'bg-green-500/10 text-green-600 dark:text-green-400',
-    'Review Summariser': 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+      const res: any = await documentsApi.getDocuments(params);
+      const payload = res ?? {};
+      const list = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.data?.data)
+          ? payload.data.data
+          : [];
+      const metaPayload = payload?.meta ?? payload?.data?.meta ?? { page, limit: 10, total: list.length };
+      const totalPages = Math.max(1, Math.ceil(metaPayload.total / metaPayload.limit));
+      setDocuments(list);
+      setMeta({ ...metaPayload, totalPages });
+    } catch {
+      setError(true);
+      setDocuments([]);
+      setMeta({ page: 1, limit: 10, total: 0, totalPages: 1 });
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [page, status, debouncedSearch]);
+
+  const showingRange = useMemo(() => {
+    if (!meta || meta.total === 0) return { start: 0, end: 0 };
+    const start = (meta.page - 1) * meta.limit + 1;
+    const end = Math.min(meta.page * meta.limit, meta.total);
+    return { start, end };
+  }, [meta]);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await documentsApi.deleteDocument(id);
+      setDocuments((prev) => prev.filter((doc) => doc._id !== id));
+      setMeta((prev) => prev ? { ...prev, total: Math.max(0, prev.total - 1) } : prev);
+    } catch {
+      toast({ title: 'Failed to delete document', variant: 'destructive' });
+    }
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setDebouncedSearch('');
+    setStatus('all');
+    setPage(1);
+  };
+
+  const noDocumentsExist = !loading && !error && meta?.total === 0 && status === 'all' && !debouncedSearch;
+  const noFilteredResults = !loading && !error && documents.length === 0 && !noDocumentsExist;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold">My Documents</h1>
-          <p className="text-muted-foreground text-sm mt-1">Your AI generation history and drafts.</p>
+          <p className="text-muted-foreground text-sm mt-1">Manage your saved drafts and published pieces.</p>
         </div>
-        <Link href="/editor" className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-xl transition-colors w-fit">
-          <Plus className="w-4 h-4" /> New Document
-        </Link>
+        <Button asChild>
+          <Link href="/editor">New Document</Link>
+        </Button>
       </div>
 
-      {/* Status Tabs */}
-      <div className="flex gap-1 p-1 bg-muted rounded-xl w-fit">
-        {STATUS_TABS.map(tab => (
-          <button key={tab} onClick={() => setActiveStatus(tab)} className={cn('px-4 py-2 rounded-lg text-sm font-medium transition-all', activeStatus === tab ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-            {tab}
-          </button>
-        ))}
+      <div className="flex flex-col gap-4">
+        <Tabs
+          value={status}
+          onValueChange={(value) => {
+            const nextStatus = value.trim();
+            setStatus(nextStatus.toLowerCase() === 'all' ? 'all' : nextStatus);
+            setPage(1);
+          }}
+        >
+          <TabsList>
+            {STATUS_TABS.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search documents..."
+            className="pl-10 pr-10"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by document title or agent..."
-          className="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-        />
-      </div>
-
-      {/* Content */}
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-5 animate-pulse">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-muted rounded-xl" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-muted rounded w-2/3" />
-                  <div className="h-3 bg-muted rounded w-1/2" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-20">
-          <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-          <h3 className="font-semibold text-lg mb-2">No documents yet</h3>
-          <p className="text-muted-foreground mb-4">Start writing to see your content history here.</p>
-          <Link href="/editor" className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-500 text-white text-sm font-semibold rounded-xl hover:bg-brand-600 transition-colors">
-            <Plus className="w-4 h-4" /> Create your first document
-          </Link>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map(log => (
-            <div key={log._id} className="bg-card border border-border rounded-xl p-5 hover:border-brand-500/30 transition-all group">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-brand-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-5 h-5 text-brand-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-medium text-sm line-clamp-1">{log.promptSnippet}</p>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${agentColors[log.agentUsed] ?? 'bg-muted text-muted-foreground'}`}>
-                      {log.agentUsed}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatRelativeTime(log.createdAt)}</span>
-                    <span>~{log.tokensUsed} tokens</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+      {error && (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-destructive">
+          <div className="flex items-center gap-2 text-sm">
+            <AlertTriangle className="w-4 h-4" />
+            Failed to load documents. Please try again.
+          </div>
+          <Button variant="destructive" onClick={fetchDocuments}>Retry</Button>
         </div>
       )}
 
-      {/* Pagination */}
-      {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted disabled:opacity-40">Previous</button>
-          <span className="text-sm text-muted-foreground">Page {page} of {meta.totalPages}</span>
-          <button onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))} disabled={page === meta.totalPages} className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted disabled:opacity-40">Next</button>
+      {loading && (
+        <div className="space-y-4">
+          <Table className="hidden md:table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Word Count</TableHead>
+                <TableHead>Last Updated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <TableRow key={idx}>
+                  <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-8 w-20 ml-auto" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          <div className="space-y-3 md:hidden">
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div key={idx} className="rounded-xl border border-border p-4 space-y-3">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {noDocumentsExist && (
+        <div className="text-center py-16">
+          <FileText className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+          <h3 className="font-semibold text-lg mb-2">No documents yet. Start your first piece.</h3>
+          <Button asChild className="mt-4">
+            <Link href="/editor">Start Writing</Link>
+          </Button>
+        </div>
+      )}
+
+      {noFilteredResults && (
+        <div className="text-center py-16">
+          <h3 className="font-semibold text-lg mb-2">No documents match your filters.</h3>
+          <Button variant="outline" onClick={clearFilters}>Clear Filters</Button>
+        </div>
+      )}
+
+      {!loading && !error && documents.length > 0 && (
+        <>
+          <Table className="hidden md:table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Word Count</TableHead>
+                <TableHead>Last Updated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {documents.map((doc) => (
+                <TableRow key={doc._id}>
+                  <TableCell>
+                    <Link href={`/editor?docId=${doc._id}`} className="font-medium hover:underline">
+                      {doc.title}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={statusColors[doc.status] || ''} variant="secondary">
+                      {doc.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{doc.wordCount ?? 0} words</TableCell>
+                  <TableCell>{formatDate(doc.updatedAt)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="icon" asChild>
+                        <Link href={`/editor?docId=${doc._id}`} aria-label="Edit document">
+                          <Pencil className="w-4 h-4" />
+                        </Link>
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteId(doc._id)}
+                            className="text-destructive hover:text-destructive"
+                            aria-label="Delete document"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteId && handleDelete(deleteId)}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          <div className="space-y-4 md:hidden">
+            {documents.map((doc) => (
+              <div key={doc._id} className="rounded-xl border border-border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Link href={`/editor?docId=${doc._id}`} className="font-medium">
+                    {doc.title}
+                  </Link>
+                  <Badge className={statusColors[doc.status] || ''} variant="secondary">
+                    {doc.status}
+                  </Badge>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {doc.wordCount ?? 0} words · {formatDate(doc.updatedAt)}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="icon" asChild>
+                    <Link href={`/editor?docId=${doc._id}`} aria-label="Edit document">
+                      <Pencil className="w-4 h-4" />
+                    </Link>
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeleteId(doc._id)}
+                        className="text-destructive hover:text-destructive"
+                        aria-label="Delete document"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteId && handleDelete(deleteId)}>
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {meta && meta.total > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            Showing {showingRange.start}-{showingRange.end} of {meta.total} results
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+              Previous
+            </Button>
+            <Button variant="outline" onClick={() => setPage((p) => Math.min(meta.totalPages, p + 1))} disabled={page === meta.totalPages}>
+              Next
+            </Button>
+          </div>
         </div>
       )}
     </div>

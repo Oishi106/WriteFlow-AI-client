@@ -121,7 +121,14 @@ export const bookingsApi = {
 
 export const documentsApi = {
   getDocuments: (params: Record<string, JsonValue> = {}) =>
-    apiClient(`/api/documents${buildQueryString(params)}`),
+    apiClient(`/api/documents${buildQueryString(params)}`,
+      {
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      }
+    ),
   createDocument: (body: Record<string, JsonValue>) =>
     apiClient('/api/documents', { method: 'POST', body: JSON.stringify(body) }),
   updateDocument: (id: string, body: Record<string, JsonValue>) =>

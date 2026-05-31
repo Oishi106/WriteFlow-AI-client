@@ -48,6 +48,22 @@ const syncStorage = (accessToken?: string | null, refreshToken?: string | null) 
   }
 };
 
+const syncApiToken = (token?: string | null, user?: AppUser | null) => {
+  if (typeof window === 'undefined') return;
+
+  if (token) {
+    localStorage.setItem('writeflow_token', token);
+  } else {
+    localStorage.removeItem('writeflow_token');
+  }
+
+  if (user) {
+    localStorage.setItem('writeflow_user', JSON.stringify(user));
+  } else {
+    localStorage.removeItem('writeflow_user');
+  }
+};
+
 const toAppUser = (session: Session | null): AppUser | null => {
   if (!session?.user) return null;
 
@@ -79,14 +95,17 @@ export const useAuthStore = create<AuthState>()(
 
       syncSession: (session: Session | null) => {
         const user = toAppUser(session);
+        const apiToken = (session?.user as { token?: string })?.token || null;
 
         if (!user) {
           syncStorage(null, null);
+          syncApiToken(null, null);
           set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false });
           return;
         }
 
         syncStorage(session?.accessToken, session?.refreshToken);
+        syncApiToken(apiToken, user);
         set({
           user,
           accessToken: session?.accessToken || null,
@@ -111,8 +130,10 @@ export const useAuthStore = create<AuthState>()(
 
           const session = await getSession();
           const user = toAppUser(session);
+          const apiToken = (session?.user as { token?: string })?.token || null;
 
           syncStorage(session?.accessToken, session?.refreshToken);
+          syncApiToken(apiToken, user);
           set({
             user,
             accessToken: session?.accessToken || null,
@@ -145,8 +166,10 @@ export const useAuthStore = create<AuthState>()(
 
           const session = await getSession();
           const user = toAppUser(session);
+          const apiToken = (session?.user as { token?: string })?.token || null;
 
           syncStorage(session?.accessToken, session?.refreshToken);
+          syncApiToken(apiToken, user);
           set({
             user,
             accessToken: session?.accessToken || null,
@@ -164,6 +187,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         syncStorage(null, null);
+        syncApiToken(null, null);
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false });
         void signOut({ callbackUrl: '/login' });
       },
