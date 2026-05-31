@@ -48,9 +48,10 @@ export const apiClient = async (
   const isClient = typeof window !== 'undefined';
   const token = serverToken ?? (isClient ? localStorage.getItem('writeflow_token') : null);
 
-  const headers = new Headers(options.headers || {});
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 
   const response = await fetch(url, { ...options, headers });
   const data = await readJsonSafe(response);
@@ -121,14 +122,7 @@ export const bookingsApi = {
 
 export const documentsApi = {
   getDocuments: (params: Record<string, JsonValue> = {}) =>
-    apiClient(`/api/documents${buildQueryString(params)}`,
-      {
-        headers: {
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-        },
-      }
-    ),
+    apiClient(`/api/documents${buildQueryString(params)}`),
   createDocument: (body: Record<string, JsonValue>) =>
     apiClient('/api/documents', { method: 'POST', body: JSON.stringify(body) }),
   updateDocument: (id: string, body: Record<string, JsonValue>) =>
@@ -137,8 +131,28 @@ export const documentsApi = {
 };
 
 export const ailogsApi = {
-  getLogs: (params: object = {}) =>
-    apiClient(`/api/ailogs?${new URLSearchParams(params as any).toString()}`),
+  getLogs: (params: Record<string, JsonValue> = {}) =>
+    apiClient(`/api/ailogs${buildQueryString(params)}`),
+};
+
+export const usersApi = {
+  getMe: () => apiClient('/api/users/me'),
+  updateMe: (body: Record<string, JsonValue>) =>
+    apiClient('/api/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  getAllUsers: (params: Record<string, JsonValue> = {}) =>
+    apiClient(`/api/users${buildQueryString(params)}`),
+  toggleStatus: (userId: string) =>
+    apiClient(`/api/users/${userId}/toggle-status`, {
+      method: 'PATCH',
+    }),
+  changeRole: (userId: string, role: string) =>
+    apiClient(`/api/users/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    }),
 };
 
 // ─── 💡 ড্যাশবোর্ডের জন্য এপিআই অবজেক্ট ───
@@ -151,16 +165,23 @@ export const adminApi = {
   getChartData: (token?: string) => apiClient('/api/dashboard/chart-data', {}, token),
   getUsers: (params: Record<string, JsonValue> = {}) =>
     apiClient(`/api/users${buildQueryString(params)}`),
-  banUser: (userId: string, banned: boolean) =>
-    apiClient('/api/users/ban', {
+  getUser: (userId: string) => apiClient(`/api/users/${userId}`),
+  updateUserProfile: (userId: string, body: Record<string, JsonValue>) =>
+    apiClient(`/api/users/${userId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ userId, banned }),
+      body: JSON.stringify(body),
     }),
   updateUserRole: (userId: string, role: string) =>
-    apiClient('/api/users/role', {
+    apiClient(`/api/users/${userId}/role`, {
       method: 'PATCH',
-      body: JSON.stringify({ userId, role }),
+      body: JSON.stringify({ role }),
     }),
+  toggleUserStatus: (userId: string) =>
+    apiClient(`/api/users/${userId}/toggle-status`, {
+      method: 'PATCH',
+    }),
+  deleteUser: (userId: string) =>
+    apiClient(`/api/users/${userId}`, { method: 'DELETE' }),
   getItems: () => apiClient('/api/items'),
   createItem: (body: Record<string, JsonValue>) =>
     apiClient('/api/items', { method: 'POST', body: JSON.stringify(body) }),
@@ -174,6 +195,13 @@ export const adminApi = {
   getSettings: () => apiClient('/api/admin/settings'),
   saveSettings: (body: object) =>
     apiClient('/api/admin/settings', { method: 'POST', body: JSON.stringify(body) }),
+};
+
+export const reviewsApi = {
+  getByItem: (itemId: string, params: Record<string, JsonValue> = {}) =>
+    apiClient(`/api/reviews/item/${itemId}${buildQueryString(params)}`),
+  create: (body: object) =>
+    apiClient('/api/reviews', { method: 'POST', body: JSON.stringify(body) }),
 };
 
 export const newsletterApi = {

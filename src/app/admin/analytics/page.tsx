@@ -37,7 +37,7 @@ export default function AdminAnalyticsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = session?.user?.token;
+    const token = (session?.user as any)?.token;
     if (!token) {
       setLoading(false);
       return;
@@ -52,7 +52,7 @@ export default function AdminAnalyticsPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [session?.user?.token]);
+  }, [(session?.user as any)?.token]);
 
   const overviewCards = [
     { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10', trend: `+${stats?.newUsersThisMonth ?? 0} this month` },
@@ -105,7 +105,7 @@ export default function AdminAnalyticsPage() {
             <div className="skeleton h-52 w-full" />
           ) : (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={charts?.dailyAIUsage.map(d => ({ date: d._id.slice(5), calls: d.count })) ?? []}>
+              <BarChart data={charts?.dailyAIUsage?.map(d => ({ date: d._id.slice(5), calls: d.count })) ?? []}>
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12 }} />
@@ -122,7 +122,7 @@ export default function AdminAnalyticsPage() {
             <div className="skeleton h-52 w-full" />
           ) : (
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={charts?.userSignups.map(d => ({ date: d._id.slice(5), users: d.count })) ?? []}>
+              <LineChart data={charts?.userSignups?.map(d => ({ date: d._id.slice(5), users: d.count })) ?? []}>
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12 }} />
@@ -142,7 +142,7 @@ export default function AdminAnalyticsPage() {
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
-                data={charts?.contentBreakdown.map(d => ({ name: CATEGORY_LABELS[d._id] || d._id, value: d.count })) ?? []}
+                data={charts?.contentBreakdown?.map(d => ({ name: CATEGORY_LABELS[d._id] || d._id, value: d.count })) ?? []}
                 cx="50%"
                 cy="50%"
                 innerRadius={60}

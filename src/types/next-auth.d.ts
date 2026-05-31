@@ -7,6 +7,8 @@ declare module 'next-auth' {
       name?: string | null;
       email?: string | null;
       image?: string | null;
+      bio?: string;
+      avatar?: string;
     };
   }
 }
@@ -16,5 +18,8 @@ declare module 'next-auth/jwt' {
     id?: string;
     role?: 'USER' | 'ADMIN';
     token?: string;
+    name?: string;
+    bio?: string;
+    avatar?: string;
   }
 }

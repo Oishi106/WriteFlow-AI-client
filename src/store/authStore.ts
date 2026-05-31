@@ -69,8 +69,10 @@ const toAppUser = (session: Session | null): AppUser | null => {
 
   const user = session.user;
 
+  const sessionUser = user as Session['user'] & { _id?: string };
+
   return {
-    _id: user._id || user.email,
+    _id: sessionUser.id || sessionUser._id || sessionUser.email || '',
     name: user.name || user.email.split('@')[0],
     email: user.email,
     role: user.role || 'USER',
@@ -94,15 +96,40 @@ export const useAuthStore = create<AuthState>()(
       hasHydrated: false,
 
       syncSession: (session: Session | null) => {
-        const user = toAppUser(session);
+        const sessionUser = toAppUser(session);
         const apiToken = (session?.user as { token?: string })?.token || null;
 
-        if (!user) {
+        if (!sessionUser) {
           syncStorage(null, null);
           syncApiToken(null, null);
           set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false });
           return;
         }
+
+        let cachedUser: AppUser | null = null;
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('writeflow_user');
+            cachedUser = raw ? (JSON.parse(raw) as AppUser) : null;
+          } catch {
+            cachedUser = null;
+          }
+        }
+
+        const existing = get().user;
+        const profileSource = cachedUser ?? existing;
+        const user =
+          profileSource && profileSource._id === sessionUser._id
+            ? {
+                ...sessionUser,
+                name: profileSource.name,
+                bio: profileSource.bio,
+                avatar: profileSource.avatar,
+                plan: profileSource.plan ?? sessionUser.plan,
+                createdAt: profileSource.createdAt ?? sessionUser.createdAt,
+                updatedAt: profileSource.updatedAt ?? sessionUser.updatedAt,
+              }
+            : sessionUser;
 
         syncStorage(session?.accessToken, session?.refreshToken);
         syncApiToken(apiToken, user);
@@ -194,9 +221,15 @@ export const useAuthStore = create<AuthState>()(
 
       updateUser: (updatedUser: Partial<AppUser>) => {
         const currentUser = get().user;
-        if (currentUser) {
-          set({ user: { ...currentUser, ...updatedUser } });
-        }
+        if (!currentUser) return;
+
+        const nextUser = { ...currentUser, ...updatedUser };
+        const token =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('writeflow_token') || get().accessToken
+            : get().accessToken;
+        syncApiToken(token, nextUser);
+        set({ user: nextUser });
       },
 
       setLoading: (loading: boolean) => set({ isLoading: loading }),

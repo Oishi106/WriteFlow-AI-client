@@ -119,12 +119,20 @@ export const authOptions: NextAuthOptions = {
 
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         const sessionUser = user as CredentialsUser;
         token.id = sessionUser.id;
         token.role = sessionUser.role;
         token.token = sessionUser.token;
+        if (sessionUser.name) token.name = sessionUser.name;
+      }
+
+      if (trigger === 'update' && session) {
+        const patch = session as { name?: string; bio?: string; avatar?: string };
+        if (patch.name) token.name = patch.name;
+        if (patch.bio !== undefined) token.bio = patch.bio;
+        if (patch.avatar !== undefined) token.avatar = patch.avatar;
       }
 
       return token;
@@ -134,6 +142,13 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.role = token.role as 'USER' | 'ADMIN';
         session.user.token = token.token as string;
+        if (token.name) session.user.name = token.name as string;
+        if (token.bio !== undefined) {
+          (session.user as { bio?: string }).bio = token.bio as string;
+        }
+        if (token.avatar !== undefined) {
+          (session.user as { avatar?: string }).avatar = token.avatar as string;
+        }
       }
 
       return session;

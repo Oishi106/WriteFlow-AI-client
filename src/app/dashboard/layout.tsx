@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  LayoutDashboard, FileText, User, History, Settings,
+  LayoutDashboard, FileText, User, Sparkles, Settings,
   LogOut, ChevronLeft, ChevronRight, Zap, Menu, X,
   BarChart2, Users, BookTemplate, Star, SlidersHorizontal
 } from 'lucide-react';
@@ -17,7 +17,7 @@ const userNavItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/dashboard/documents', label: 'My Documents', icon: FileText },
   { href: '/dashboard/profile', label: 'My Profile', icon: User },
-  { href: '/dashboard/usage-history', label: 'AI Usage History', icon: History },
+  { href: '/dashboard/ai-history', label: 'AI History', icon: Sparkles },
 ];
 
 const adminNavItems = [

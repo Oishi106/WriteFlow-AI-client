@@ -34,7 +34,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace(session.user.role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
+    router.replace((session.user as any).role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
   }, [router, session, status]);
 
   const fillDemo = (type: 'user' | 'admin') => {
@@ -55,7 +55,7 @@ export default function LoginPage() {
       }
 
       const nextSession = await getSession();
-      const role = nextSession?.user?.role;
+      const role = (nextSession?.user as any)?.role;
 
       toast({ title: 'Welcome back!', description: 'Login successful.' });
       router.replace(role === 'ADMIN' ? '/admin/analytics' : '/dashboard');

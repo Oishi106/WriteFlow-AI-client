@@ -1,178 +1,194 @@
 'use client';
 
-import { useState } from 'react';
-import { Save, Loader2, Globe, Bot, AlertTriangle, Shield } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Save, Loader2, Globe, Bot, AlertTriangle, Shield, CheckCircle2 } from 'lucide-react';
+import { adminApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-
-interface SiteSettings {
-  siteName: string;
-  siteDescription: string;
-  logoUrl: string;
-  maintenanceMode: boolean;
-  enableDraftAgent: boolean;
-  enableRewriteAgent: boolean;
-  enableChatAgent: boolean;
-  enableReviewSummariser: boolean;
-  maxFreeDocuments: number;
-  maxFreeWords: number;
-}
-
-const defaultSettings: SiteSettings = {
-  siteName: 'WriteFlow AI',
-  siteDescription: 'The all-in-one agentic content workspace.',
-  logoUrl: '',
-  maintenanceMode: false,
-  enableDraftAgent: true,
-  enableRewriteAgent: true,
-  enableChatAgent: true,
-  enableReviewSummariser: true,
-  maxFreeDocuments: 5,
-  maxFreeWords: 10000,
-};
-
-function Toggle({ checked, onChange, label, description }: { checked: boolean; onChange: (v: boolean) => void; label: string; description?: string }) {
-  return (
-    <div className="flex items-center justify-between py-3">
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
-      </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${checked ? 'bg-brand-500' : 'bg-muted-foreground/30'}`}
-      >
-        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${checked ? 'translate-x-5' : ''}`} />
-      </button>
-    </div>
-  );
-}
+import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export default function AdminSettingsPage() {
-  const [settings, setSettings] = useState<SiteSettings>(defaultSettings);
-  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
-  const handleSave = async () => {
+  const [siteName, setSiteName] = useState('WriteFlow AI');
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [enableAIAgents, setEnableAIAgents] = useState(true);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showNotice, setShowNotice] = useState(false);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      setLoading(true);
+      try {
+        const response: any = await adminApi.getSettings();
+        const data = response?.data ?? response;
+        if (data) {
+          setSiteName(data.siteName ?? 'WriteFlow AI');
+          setMaintenanceMode(!!data.maintenanceMode);
+          setEnableAIAgents(data.enableAIAgents !== false);
+        }
+      } catch (err: any) {
+        console.warn('Failed to load settings from endpoint:', err);
+        // Fallback to default values and show yellow notice
+        setSiteName('WriteFlow AI');
+        setMaintenanceMode(false);
+        setEnableAIAgents(true);
+        setShowNotice(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
     setSaving(true);
-    await new Promise(r => setTimeout(r, 1000));
-    setSaving(false);
-    toast({ title: 'Settings saved successfully!' });
+    try {
+      await adminApi.saveSettings({
+        siteName,
+        maintenanceMode,
+        enableAIAgents,
+      });
+      toast({
+        title: 'Success',
+        description: 'Settings saved',
+      });
+    } catch (err: any) {
+      console.warn('Failed to save settings to backend server:', err);
+      // Yellow toast notice
+      toast({
+        title: 'Settings saved locally — not persisted to server',
+        description: 'The server endpoint is currently unavailable. Changes are stored in active state.',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const update = (key: keyof SiteSettings, value: SiteSettings[keyof SiteSettings]) =>
-    setSettings(s => ({ ...s, [key]: value }));
+  if (loading) {
+    return (
+      <div className="max-w-2xl space-y-6 animate-pulse">
+        <div className="space-y-2">
+          <div className="h-7 w-48 bg-muted rounded" />
+          <div className="h-4 w-72 bg-muted rounded" />
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-6 h-52" />
+        <div className="bg-card border border-border rounded-2xl p-6 h-40" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-6 animate-fade-in">
+      {/* Header */}
       <div>
         <h1 className="font-display text-2xl font-bold">Site Settings</h1>
-        <p className="text-muted-foreground text-sm mt-1">Configure global platform settings and feature flags.</p>
+        <p className="text-muted-foreground text-sm mt-1">
+          Configure global platform settings, maintenance modes, and AI feature switches
+        </p>
       </div>
 
-      {/* Maintenance Mode Warning */}
-      {settings.maintenanceMode && (
-        <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+      {/* Yellow Warning Notice if endpoint failed */}
+      {showNotice && (
+        <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-600 dark:text-yellow-400">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-red-600 dark:text-red-400">Maintenance Mode is ON</p>
-            <p className="text-xs text-red-500/80 mt-0.5">Users will see a maintenance page. Only admins can access the platform.</p>
+            <p className="text-sm font-semibold">Notice</p>
+            <p className="text-xs mt-0.5">Could not load saved settings. Showing defaults.</p>
           </div>
         </div>
       )}
 
-      {/* General Settings */}
-      <div className="bg-card border border-border rounded-2xl p-6">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Globe className="w-4 h-4 text-brand-500" /> General Settings
-        </h2>
-        <div className="space-y-4">
+      {/* Maintenance Mode Alert Banner */}
+      {maintenanceMode && (
+        <div className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/30 rounded-xl text-destructive">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <div>
-            <label className="block text-sm font-medium mb-1.5">Site Name</label>
-            <input
-              value={settings.siteName}
-              onChange={e => update('siteName', e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-            />
+            <p className="text-sm font-semibold">Maintenance Mode is Active</p>
+            <p className="text-xs mt-0.5">
+              Only platform administrators will have access to services. Regular users will see a maintenance page.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Site Description</label>
-            <input
-              value={settings.siteDescription}
-              onChange={e => update('siteDescription', e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Logo URL</label>
-            <input
-              value={settings.logoUrl}
-              onChange={e => update('logoUrl', e.target.value)}
-              placeholder="https://example.com/logo.png"
-              className="w-full px-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-            />
-          </div>
+        </div>
+      )}
 
-          <div className="border-t border-border pt-3">
-            <Toggle
-              checked={settings.maintenanceMode}
-              onChange={v => update('maintenanceMode', v)}
-              label="Maintenance Mode"
-              description="Temporarily disable the platform for all non-admin users."
+      <form onSubmit={handleSave} className="space-y-6">
+        {/* General Settings */}
+        <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Globe className="w-4 h-4 text-brand-500" /> General Settings
+          </h2>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold uppercase text-muted-foreground">
+              Site Name
+            </label>
+            <Input
+              value={siteName}
+              onChange={(e) => setSiteName(e.target.value)}
+              placeholder="WriteFlow AI"
+              required
             />
           </div>
         </div>
-      </div>
 
-      {/* AI Agents */}
-      <div className="bg-card border border-border rounded-2xl p-6">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Bot className="w-4 h-4 text-brand-500" /> AI Agents
-        </h2>
-        <div className="divide-y divide-border">
-          <Toggle checked={settings.enableDraftAgent} onChange={v => update('enableDraftAgent', v)} label="Content Draft Agent" description="Allows users to generate blog posts, social captions, and emails." />
-          <Toggle checked={settings.enableRewriteAgent} onChange={v => update('enableRewriteAgent', v)} label="Rewrite & Tone Agent" description="Allows users to rewrite, shorten, expand, and fix grammar." />
-          <Toggle checked={settings.enableChatAgent} onChange={v => update('enableChatAgent', v)} label="Chat Assistant Agent" description="Enables the in-editor AI chat sidebar." />
-          <Toggle checked={settings.enableReviewSummariser} onChange={v => update('enableReviewSummariser', v)} label="Review Summariser Agent" description="Admin-only tool to summarise platform reviews with AI." />
-        </div>
-      </div>
+        {/* Feature toggles */}
+        <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Bot className="w-4 h-4 text-brand-500" /> Platform Toggles
+          </h2>
 
-      {/* Free Plan Limits */}
-      <div className="bg-card border border-border rounded-2xl p-6">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Shield className="w-4 h-4 text-brand-500" /> Free Plan Limits
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Max Documents / Month</label>
-            <input
-              type="number"
-              value={settings.maxFreeDocuments}
-              onChange={e => update('maxFreeDocuments', Number(e.target.value))}
-              min={1}
-              className="w-full px-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Max Words / Month</label>
-            <input
-              type="number"
-              value={settings.maxFreeWords}
-              onChange={e => update('maxFreeWords', Number(e.target.value))}
-              min={1000}
-              step={1000}
-              className="w-full px-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-            />
+          <div className="divide-y divide-border">
+            {/* Maintenance Switch */}
+            <div className="flex items-center justify-between py-4">
+              <div className="space-y-0.5 pr-4">
+                <p className="text-sm font-semibold">Maintenance Mode</p>
+                <p className="text-xs text-muted-foreground">
+                  Lock site access for regular users when performing database or layout updates.
+                </p>
+              </div>
+              <Switch
+                checked={maintenanceMode}
+                onCheckedChange={setMaintenanceMode}
+              />
+            </div>
+
+            {/* AI Switch */}
+            <div className="flex items-center justify-between py-4">
+              <div className="space-y-0.5 pr-4">
+                <p className="text-sm font-semibold">Enable AI Agents</p>
+                <p className="text-xs text-muted-foreground">
+                  Global switch to permit description generations and template assistance services.
+                </p>
+              </div>
+              <Switch
+                checked={enableAIAgents}
+                onCheckedChange={setEnableAIAgents}
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="flex items-center gap-2 px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-60"
-      >
-        {saving ? <><Loader2 className="w-4 h-4 animate-spin" />Saving...</> : <><Save className="w-4 h-4" />Save Settings</>}
-      </button>
+        {/* Submit */}
+        <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+          {saving ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Saving Settings...
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4 mr-2" />
+              Save Settings
+            </>
+          )}
+        </Button>
+      </form>
     </div>
   );
 }
