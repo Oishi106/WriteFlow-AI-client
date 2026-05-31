@@ -6,6 +6,7 @@ import { FileText, Zap, TrendingUp, Clock, ArrowRight, Plus } from 'lucide-react
 import { dashboardApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { formatNumber } from '@/lib/utils';
+import { useSession } from 'next-auth/react';
 
 interface MyStats {
   totalDocuments: number;
@@ -16,15 +17,30 @@ interface MyStats {
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const { data: session } = useSession();
   const [stats, setStats] = useState<MyStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    dashboardApi.getMyStats()
-      .then(r => setStats(r.data.data))
+    const token = session?.user?.token;
+
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    dashboardApi.getMyStats(token)
+      .then((r: any) => {
+        // ব্যাকএন্ডের রেসপন্স স্ট্রাকচার অনুযায়ী ডাটা সেট করা হচ্ছে
+        if (r && r.data) {
+          setStats(r.data);
+        } else if (r && r.totalDocuments !== undefined) {
+          setStats(r as MyStats);
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [session?.user?.token]);
 
   const statCards = [
     { label: 'Total Documents', value: stats?.totalDocuments ?? 0, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-500/10' },

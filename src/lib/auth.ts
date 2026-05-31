@@ -1,76 +1,33 @@
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import type { NextAuthOptions } from 'next-auth';
-import { authApi } from '@/lib/api';
 
-export type AppRole = 'USER' | 'ADMIN';
-export type AppPlan = 'FREE' | 'PRO' | 'TEAM';
-export type AppStatus = 'ACTIVE' | 'BANNED';
+type BackendUser = {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: 'USER' | 'ADMIN';
+};
 
-export interface AppUser {
-  _id: string;
-  name: string;
-  email: string;
-  role: AppRole;
-  plan: AppPlan;
-  status: AppStatus;
-  avatar?: string;
-  bio?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-type SessionPayload = AppUser & {
+type CredentialsUser = {
   id: string;
-  accessToken?: string;
-  refreshToken?: string;
+  name?: string;
+  email?: string;
+  role?: 'USER' | 'ADMIN';
+  token?: string;
 };
 
-const demoAccounts: Record<string, { password: string; role: AppRole; plan: AppPlan }> = {
-  'user@writeflow.com': { password: '123456', role: 'USER', plan: 'FREE' },
-  'admin@writeflow.com': { password: '123456', role: 'ADMIN', plan: 'TEAM' },
-};
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-const parseAdminEmails = () =>
-  (process.env.AUTH_ADMIN_EMAILS || 'admin@writeflow.com')
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-
-const getRoleFromEmail = (email?: string | null): AppRole => {
-  if (!email) return 'USER';
-  return parseAdminEmails().includes(email.toLowerCase()) ? 'ADMIN' : 'USER';
-};
-
-const buildUser = (payload: Partial<AppUser> & { email: string; name?: string; role?: AppRole }): AppUser => ({
-  _id: payload._id || payload.email,
-  name: payload.name || payload.email.split('@')[0],
-  email: payload.email,
-  role: payload.role || getRoleFromEmail(payload.email),
-  plan: payload.plan || (payload.role === 'ADMIN' ? 'TEAM' : 'FREE'),
-  status: payload.status || 'ACTIVE',
-  avatar: payload.avatar,
-  bio: payload.bio,
-  createdAt: payload.createdAt || new Date().toISOString(),
-  updatedAt: payload.updatedAt || new Date().toISOString(),
-});
-
-const buildDemoUser = (email: string): SessionPayload => {
-  const account = demoAccounts[email.toLowerCase()] || demoAccounts['user@writeflow.com'];
-
-  return {
-    id: email,
-    ...buildUser({
-      _id: email,
-      name: account.role === 'ADMIN' ? 'Admin User' : 'Demo User',
-      email,
-      role: account.role,
-      plan: account.plan,
-      status: 'ACTIVE',
-    }),
-    accessToken: `demo-access-${account.role.toLowerCase()}`,
-    refreshToken: `demo-refresh-${account.role.toLowerCase()}`,
-  };
+const safeJson = async (response: Response) => {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as any;
+  } catch {
+    return null;
+  }
 };
 
 export const authOptions: NextAuthOptions = {
@@ -78,12 +35,12 @@ export const authOptions: NextAuthOptions = {
     strategy: 'jwt',
   },
   pages: {
-    signIn: '/login',
+    signIn: '/auth/login',
   },
   providers: [
     GoogleProvider({
-      clientId: process.env.AUTH_GOOGLE_ID || '',
-      clientSecret: process.env.AUTH_GOOGLE_SECRET || '',
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     }),
     CredentialsProvider({
       name: 'Credentials',
@@ -92,82 +49,93 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        const email = credentials?.email?.trim().toLowerCase();
+        const email = credentials?.email?.trim();
         const password = credentials?.password;
 
         if (!email || !password) {
           return null;
         }
 
-        try {
-          const { data } = await authApi.login({ email, password });
-          const payload = data?.data;
+        const response = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
 
-          if (!payload?.user) {
-            return null;
-          }
+        const payload = await safeJson(response);
 
-          const user = buildUser({
-            ...payload.user,
-            _id: payload.user._id || payload.user.id || email,
-          });
-
-          return {
-            id: user._id,
-            ...user,
-            accessToken: payload.accessToken,
-            refreshToken: payload.refreshToken,
-          } as SessionPayload;
-        } catch {
-          const demo = demoAccounts[email];
-
-          if (demo && demo.password === password) {
-            return buildDemoUser(email);
-          }
-
-          return null;
+        if (!response.ok) {
+          const message = payload?.message || 'Login failed';
+          throw new Error(message);
         }
+
+        const data = payload?.data ?? payload;
+        const tokenValue = data?.token || data?.accessToken;
+        const userValue = data?.user || data?.data?.user;
+
+        if (!userValue || !tokenValue) {
+          throw new Error(payload?.message || 'Invalid login response');
+        }
+
+        const user = userValue as BackendUser;
+        return {
+          id: user._id || user.id || email,
+          name: user.name,
+          email: user.email || email,
+          role: user.role,
+          token: tokenValue,
+        } as CredentialsUser;
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user, account, profile }) {
-      if (user) {
-        const sessionUser = user as SessionPayload;
-        token.user = {
-          ...buildUser(sessionUser),
-          avatar: sessionUser.avatar,
-        };
-        token.accessToken = sessionUser.accessToken;
-        token.refreshToken = sessionUser.refreshToken;
-      }
+    async signIn({ user, account }) {
+      if (account?.provider !== 'google') return true;
 
-      if (account?.provider === 'google' && profile) {
-        const googleProfile = profile as Record<string, string | undefined>;
-        const profileEmail = googleProfile.email || token.email || '';
-        const googleUser = buildUser({
-          _id: googleProfile.sub || profileEmail,
-          name: googleProfile.name || token.name || profileEmail.split('@')[0],
-          email: profileEmail,
-          role: getRoleFromEmail(profileEmail),
-          plan: getRoleFromEmail(profileEmail) === 'ADMIN' ? 'TEAM' : 'FREE',
-          avatar: googleProfile.picture || undefined,
-          status: 'ACTIVE',
+      try {
+        const response = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/api/auth/google-upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: user.name,
+            email: user.email,
+            googleId: account.providerAccountId,
+          }),
         });
 
-        token.user = googleUser;
-        token.accessToken = account.access_token;
-        token.refreshToken = account.refresh_token;
+        const payload = await safeJson(response);
+        const data = payload?.data;
+
+        if (response.ok && data?.token) {
+          (user as CredentialsUser).token = data.token;
+          (user as CredentialsUser).role = data.user?.role || 'USER';
+          (user as CredentialsUser).id = data.user?._id || data.user?.id || user.id;
+        } else {
+          (user as CredentialsUser).role = (user as CredentialsUser).role || 'USER';
+        }
+      } catch {
+        (user as CredentialsUser).role = (user as CredentialsUser).role || 'USER';
+      }
+
+      return true;
+    },
+    async jwt({ token, user }) {
+      if (user) {
+        const sessionUser = user as CredentialsUser;
+        token.id = sessionUser.id;
+        token.role = sessionUser.role;
+        token.token = sessionUser.token;
       }
 
       return token;
     },
     async session({ session, token }) {
-      if (token.user) {
-        session.user = token.user;
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.role = token.role as 'USER' | 'ADMIN';
+        session.user.token = token.token as string;
       }
-      session.accessToken = token.accessToken as string | undefined;
-      session.refreshToken = token.refreshToken as string | undefined;
+
       return session;
     },
   },

@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Users, FileText, Zap, DollarSign, TrendingUp } from 'lucide-react';
-import { dashboardApi } from '@/lib/api';
+import { adminApi } from '@/lib/api';
 import { formatNumber } from '@/lib/utils';
+import { useSession } from 'next-auth/react';
 
 interface Stats {
   totalUsers: number;
@@ -30,19 +31,28 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function AdminAnalyticsPage() {
+  const { data: session } = useSession();
   const [stats, setStats] = useState<Stats | null>(null);
   const [charts, setCharts] = useState<ChartData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([dashboardApi.getStats(), dashboardApi.getChartData()])
-      .then(([statsRes, chartsRes]) => {
-        setStats(statsRes.data.data);
-        setCharts(chartsRes.data.data);
+    const token = session?.user?.token;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    Promise.all([adminApi.getStats(token), adminApi.getChartData(token)])
+      .then(([statsRes, chartsRes]: any[]) => {
+        const statsPayload = statsRes?.data ?? statsRes;
+        const chartsPayload = chartsRes?.data ?? chartsRes;
+        setStats(statsPayload);
+        setCharts(chartsPayload);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [session?.user?.token]);
 
   const overviewCards = [
     { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10', trend: `+${stats?.newUsersThisMonth ?? 0} this month` },

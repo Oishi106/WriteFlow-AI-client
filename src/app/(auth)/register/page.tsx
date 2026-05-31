@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSession, signIn } from 'next-auth/react'; // 💡 signIn ইম্পোর্ট করা হয়েছে অটো-লগইনের জন্য
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -21,24 +22,55 @@ type FormData = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const [showPass, setShowPass] = useState(false);
-  const { register: registerUser, isLoading } = useAuthStore();
+  const { register: registerUser, isLoading: isAuthStoreLoading } = useAuthStore();
+  const [isSigningIn, setIsSigningIn] = useState(false); // 💡 অটো লগইন ট্র্যাকিং স্টেট
   const router = useRouter();
+  const { data: session, status } = useSession();
   const { toast } = useToast();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
+  useEffect(() => {
+    if (status !== 'authenticated' || !session?.user) {
+      return;
+    }
+    // সেশন অ্যাক্টিভ থাকলে রোল অনুযায়ী রিডাইরেক্ট
+    router.replace((session.user as any).role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
+  }, [router, session, status]);
+
   const onSubmit = async (data: FormData) => {
     try {
-      const user = await registerUser(data.name, data.email, data.password);
-      toast({ title: 'Account created!', description: 'Welcome to WriteFlow AI.' });
-      router.push(user?.role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
+      // ─── 💡 ১. অবজেক্ট আকারে ডাটা পাঠানো হচ্ছে (api.ts এর সাথে সামঞ্জস্য রেখে) ───
+      await registerUser(data.name, data.email, data.password);
+      
+      toast({ title: 'Account created!', description: 'Logging you in automatically...' });
+      setIsSigningIn(true);
+
+      // ─── 💡 ২. একাউন্ট ক্রিয়েশন শেষে সরাসরি NextAuth দিয়ে লগইন ───
+      const result = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        redirect: false, // ইউআরএল নষ্ট হওয়া আটকাতে
+      });
+
+      if (result?.error) {
+        toast({ title: 'Sign-in failed', description: 'Account created, please login manually.', variant: 'destructive' });
+        router.push('/login');
+      } else {
+        router.push('/dashboard');
+        router.refresh();
+      }
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Registration failed.';
       toast({ title: 'Error', description: message, variant: 'destructive' });
+      setIsSigningIn(false);
     }
   };
+
+  // যেকোনো একটি লোডিং সত্য হলেই বাটন ডিসেবল হবে
+  const isLoading = isAuthStoreLoading || isSigningIn;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-background">
@@ -120,7 +152,7 @@ export default function RegisterPage() {
             disabled={isLoading}
             className="w-full py-3 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
           >
-            {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating account...</> : 'Create Free Account'}
+            {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Preparing workspace...</> : 'Create Free Account'}
           </button>
         </form>
 

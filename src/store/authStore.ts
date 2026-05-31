@@ -2,7 +2,18 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { getSession, signIn, signOut } from 'next-auth/react';
 import { authApi } from '@/lib/api';
-import type { AppUser } from '@/lib/auth';
+type AppUser = {
+  _id: string;
+  name: string;
+  email: string;
+  role?: 'USER' | 'ADMIN';
+  plan?: 'FREE' | 'PRO' | 'TEAM';
+  status?: 'ACTIVE' | 'BANNED';
+  avatar?: string;
+  bio?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 import type { Session } from 'next-auth';
 
 interface AuthState {
@@ -11,12 +22,14 @@ interface AuthState {
   refreshToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  hasHydrated: boolean;
   login: (email: string, password: string) => Promise<AppUser | null>;
   register: (name: string, email: string, password: string) => Promise<AppUser | null>;
   logout: () => void;
   updateUser: (user: Partial<AppUser>) => void;
   syncSession: (session: Session | null) => void;
   setLoading: (loading: boolean) => void;
+  setHasHydrated: (hydrated: boolean) => void;
 }
 
 const syncStorage = (accessToken?: string | null, refreshToken?: string | null) => {
@@ -62,6 +75,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isLoading: false,
       isAuthenticated: false,
+      hasHydrated: false,
 
       syncSession: (session: Session | null) => {
         const user = toAppUser(session);
@@ -117,19 +131,7 @@ export const useAuthStore = create<AuthState>()(
       register: async (name: string, email: string, password: string) => {
         set({ isLoading: true });
         try {
-          const { data } = await authApi.register({ name, email, password });
-          const payload = data.data;
-
-          if (payload?.accessToken || payload?.refreshToken) {
-            syncStorage(payload.accessToken, payload.refreshToken);
-            set({
-              user: payload.user,
-              accessToken: payload.accessToken,
-              refreshToken: payload.refreshToken,
-              isAuthenticated: true,
-              isLoading: false,
-            });
-          }
+          await authApi.register({ name, email, password });
 
           const result = await signIn('credentials', {
             email,
@@ -147,8 +149,8 @@ export const useAuthStore = create<AuthState>()(
           syncStorage(session?.accessToken, session?.refreshToken);
           set({
             user,
-            accessToken: session?.accessToken || payload?.accessToken || null,
-            refreshToken: session?.refreshToken || payload?.refreshToken || null,
+            accessToken: session?.accessToken || null,
+            refreshToken: session?.refreshToken || null,
             isAuthenticated: !!user,
             isLoading: false,
           });
@@ -174,9 +176,13 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setLoading: (loading: boolean) => set({ isLoading: loading }),
+      setHasHydrated: (hydrated: boolean) => set({ hasHydrated: hydrated }),
     }),
     {
       name: 'writeflow-auth',
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,

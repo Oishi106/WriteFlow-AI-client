@@ -9,6 +9,7 @@ import { usersApi, dashboardApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 import { formatDate } from '@/lib/utils';
+import { useSession } from 'next-auth/react';
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -27,6 +28,7 @@ interface MyStats {
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuthStore();
+  const { data: session } = useSession();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [stats, setStats] = useState<MyStats | null>(null);
@@ -38,8 +40,18 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user) reset({ name: user.name, bio: user.bio || '', avatar: user.avatar || '' });
-    dashboardApi.getMyStats().then(r => setStats(r.data.data)).catch(() => {});
-  }, [user, reset]);
+    const token = session?.user?.token;
+    if (!token) return;
+    dashboardApi.getMyStats(token)
+      .then((r: any) => {
+        if (r?.data) {
+          setStats(r.data);
+        } else if (r && r.totalDocuments !== undefined) {
+          setStats(r as MyStats);
+        }
+      })
+      .catch(() => {});
+  }, [user, reset, session?.user?.token]);
 
   const avatarUrl = watch('avatar');
 

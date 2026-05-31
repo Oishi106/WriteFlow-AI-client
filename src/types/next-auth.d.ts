@@ -1,17 +1,20 @@
-import type { AppUser } from '@/lib/auth';
-
 declare module 'next-auth' {
   interface Session {
-    user: AppUser;
-    accessToken?: string;
-    refreshToken?: string;
+    user: {
+      id: string;
+      role: 'USER' | 'ADMIN';
+      token: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+    };
   }
 }
 
 declare module 'next-auth/jwt' {
   interface JWT {
-    user?: AppUser;
-    accessToken?: string;
-    refreshToken?: string;
+    id?: string;
+    role?: 'USER' | 'ADMIN';
+    token?: string;
   }
 }

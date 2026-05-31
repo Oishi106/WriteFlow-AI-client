@@ -1,129 +1,192 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
+type JsonRecord = Record<string, JsonValue>;
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+export class ApiError extends Error {
+  status: number;
+  details?: JsonValue;
 
-export const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-// Request interceptor: attach token
-api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('accessToken');
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Response interceptor: handle 401
-api.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
-
-        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-        localStorage.setItem('accessToken', data.data.accessToken);
-        localStorage.setItem('refreshToken', data.data.refreshToken);
-
-        originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
-        return api(originalRequest);
-      } catch {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        if (typeof window !== 'undefined') window.location.href = '/login';
-      }
-    }
-
-    return Promise.reject(error);
+  constructor(message: string, status: number, details?: JsonValue) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.details = details;
   }
-);
+}
 
-// ─── Auth API ──────────────────────────────────────────────────────────────────
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+const buildQueryString = (params?: Record<string, JsonValue>) => {
+  if (!params) return '';
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    searchParams.set(key, String(value));
+  });
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+};
+
+const readJsonSafe = async (response: Response) => {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as JsonValue;
+  } catch {
+    return text as JsonValue;
+  }
+};
+
+export const apiClient = async (
+  path: string,
+  options: RequestInit = {},
+  serverToken?: string
+): Promise<JsonValue> => {
+  const baseUrl = API_BASE_URL.replace(/\/$/, '');
+  const url = `${baseUrl}${path}`;
+  const isClient = typeof window !== 'undefined';
+  const token = serverToken ?? (isClient ? localStorage.getItem('writeflow_token') : null);
+
+  const headers = new Headers(options.headers || {});
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const response = await fetch(url, { ...options, headers });
+  const data = await readJsonSafe(response);
+
+  if (!response.ok) {
+    const message =
+      (data && typeof data === 'object' && 'message' in data && data.message) ||
+      response.statusText ||
+      'Request failed';
+    throw new ApiError(String(message), response.status, data ?? undefined);
+  }
+
+  return data as JsonValue;
+};
+
 export const authApi = {
-  register: (data: { name: string; email: string; password: string }) =>
-    api.post('/auth/register', data),
-  login: (data: { email: string; password: string }) =>
-    api.post('/auth/login', data),
-  refreshToken: (refreshToken: string) =>
-    api.post('/auth/refresh-token', { refreshToken }),
-  getMe: () => api.get('/auth/me'),
+  login: async (email: string, password: string) => {
+    const response = await apiClient('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+
+    const payload =
+      response && typeof response === 'object' && 'data' in response
+        ? (response as JsonRecord).data
+        : response;
+    const token =
+      payload && typeof payload === 'object' && 'token' in payload
+        ? (payload as JsonRecord).token
+        : undefined;
+    const user =
+      payload && typeof payload === 'object' && 'user' in payload
+        ? (payload as JsonRecord).user
+        : undefined;
+
+    if (typeof window !== 'undefined' && token && user) {
+      localStorage.setItem('writeflow_token', String(token));
+      localStorage.setItem('writeflow_user', JSON.stringify(user));
+    }
+
+    return user ?? null;
+  },
+  logout: () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('writeflow_token');
+      localStorage.removeItem('writeflow_user');
+    }
+  },
+  
+  // ─── 💡 ফিক্সড রেজিস্ট্রেশন মেথড (অবজেক্ট আকারে ডাটা রিসিভ করবে) ───
+  register: ({ name, email, password }: { name: string; email: string; password: string }) =>
+    apiClient('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password }),
+    }),
 };
 
-// ─── Users API ─────────────────────────────────────────────────────────────────
-export const usersApi = {
-  getMyProfile: () => api.get('/users/me'),
-  updateMyProfile: (data: Partial<{ name: string; bio: string; avatar: string }>) =>
-    api.patch('/users/me', data),
-  getAllUsers: (params?: Record<string, string | number>) =>
-    api.get('/users', { params }),
-  getUserById: (id: string) => api.get(`/users/${id}`),
-  changeRole: (id: string, role: string) => api.patch(`/users/${id}/role`, { role }),
-  toggleStatus: (id: string) => api.patch(`/users/${id}/toggle-status`),
-  deleteUser: (id: string) => api.delete(`/users/${id}`),
-};
-
-// ─── Items (Templates) API ─────────────────────────────────────────────────────
 export const itemsApi = {
-  getAll: (params?: Record<string, string | number>) => api.get('/items', { params }),
-  getById: (id: string) => api.get(`/items/${id}`),
-  getRelated: (id: string) => api.get(`/items/${id}/related`),
-  create: (data: Record<string, unknown>) => api.post('/items', data),
-  update: (id: string, data: Record<string, unknown>) => api.patch(`/items/${id}`, data),
-  delete: (id: string) => api.delete(`/items/${id}`),
+  getItems: (params: Record<string, JsonValue> = {}) =>
+    apiClient(`/api/items${buildQueryString(params)}`),
+  getItemById: (id: string) => apiClient(`/api/items/${id}`),
 };
 
-// ─── Reviews API ───────────────────────────────────────────────────────────────
-export const reviewsApi = {
-  create: (data: { rating: number; comment: string; itemId: string }) =>
-    api.post('/reviews', data),
-  getByItem: (itemId: string, params?: Record<string, string | number>) =>
-    api.get(`/reviews/item/${itemId}`, { params }),
-  getAll: (params?: Record<string, string | number>) => api.get('/reviews', { params }),
-  approve: (id: string, approved: boolean) =>
-    api.patch(`/reviews/${id}/approve`, { approved }),
-  delete: (id: string) => api.delete(`/reviews/${id}`),
-};
-
-// ─── Bookings API ──────────────────────────────────────────────────────────────
 export const bookingsApi = {
-  create: (data: { itemId: string; quantity?: number; price: number }) =>
-    api.post('/bookings', data),
-  getAll: (params?: Record<string, string | number>) => api.get('/bookings', { params }),
-  updateStatus: (id: string, status: string) => api.patch(`/bookings/${id}`, { status }),
-  delete: (id: string) => api.delete(`/bookings/${id}`),
+  create: (body: object) =>
+    apiClient('/api/bookings', { method: 'POST', body: JSON.stringify(body) }),
 };
 
-// ─── Dashboard API ─────────────────────────────────────────────────────────────
+export const documentsApi = {
+  getDocuments: (params: Record<string, JsonValue> = {}) =>
+    apiClient(`/api/documents${buildQueryString(params)}`),
+  createDocument: (body: Record<string, JsonValue>) =>
+    apiClient('/api/documents', { method: 'POST', body: JSON.stringify(body) }),
+  updateDocument: (id: string, body: Record<string, JsonValue>) =>
+    apiClient(`/api/documents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteDocument: (id: string) => apiClient(`/api/documents/${id}`, { method: 'DELETE' }),
+};
+
+export const ailogsApi = {
+  getLogs: (params: object = {}) =>
+    apiClient(`/api/ailogs?${new URLSearchParams(params as any).toString()}`),
+};
+
+// ─── 💡 ড্যাশবোর্ডের জন্য এপিআই অবজেক্ট ───
 export const dashboardApi = {
-  getStats: () => api.get('/dashboard/stats'),
-  getChartData: () => api.get('/dashboard/chart-data'),
-  getMyStats: () => api.get('/dashboard/my-stats'),
+  getMyStats: (token?: string) => apiClient('/api/dashboard/my-stats', {}, token),
 };
 
-// ─── AI API ────────────────────────────────────────────────────────────────────
+export const adminApi = {
+  getStats: (token?: string) => apiClient('/api/dashboard/stats', {}, token),
+  getChartData: (token?: string) => apiClient('/api/dashboard/chart-data', {}, token),
+  getUsers: (params: Record<string, JsonValue> = {}) =>
+    apiClient(`/api/users${buildQueryString(params)}`),
+  banUser: (userId: string, banned: boolean) =>
+    apiClient('/api/users/ban', {
+      method: 'PATCH',
+      body: JSON.stringify({ userId, banned }),
+    }),
+  updateUserRole: (userId: string, role: string) =>
+    apiClient('/api/users/role', {
+      method: 'PATCH',
+      body: JSON.stringify({ userId, role }),
+    }),
+  getItems: () => apiClient('/api/items'),
+  createItem: (body: Record<string, JsonValue>) =>
+    apiClient('/api/items', { method: 'POST', body: JSON.stringify(body) }),
+  updateItem: (id: string, body: Record<string, JsonValue>) =>
+    apiClient(`/api/items/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteItem: (id: string) => apiClient(`/api/items/${id}`, { method: 'DELETE' }),
+  getReviews: () => apiClient('/api/reviews'),
+  approveReview: (id: string) => apiClient(`/api/reviews/${id}/approve`, { method: 'PATCH' }),
+  deleteReview: (id: string) =>
+    apiClient(`/api/reviews/${id}`, { method: 'DELETE' }),
+  getSettings: () => apiClient('/api/admin/settings'),
+  saveSettings: (body: object) =>
+    apiClient('/api/admin/settings', { method: 'POST', body: JSON.stringify(body) }),
+};
+
+export const newsletterApi = {
+  subscribe: (email: string) =>
+    apiClient('/api/newsletter', { method: 'POST', body: JSON.stringify({ email }) }),
+};
+
 export const aiApi = {
-  generate: (data: { topic: string; tone: string; targetAudience: string; contentType: string }) =>
-    api.post('/ai/generate', data),
-  rewrite: (data: { content: string; tone: string; action: string }) =>
-    api.post('/ai/rewrite', data),
-  chat: (data: { messages: Array<{ role: string; content: string }>; documentContext?: string }) =>
-    api.post('/ai/chat', data),
-  summariseReviews: (itemId?: string) =>
-    api.post('/ai/review-summary', itemId ? { itemId } : {}),
-  generateDescription: (data: { title: string; category: string }) =>
-    api.post('/ai/generate-description', data),
-  getHistory: (params?: Record<string, string | number>) =>
-    api.get('/ai/history', { params }),
+  generateContent: (body: Record<string, JsonValue>) =>
+    apiClient('/api/ai/generate-description', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  rewriteContent: (body: Record<string, JsonValue>) =>
+    apiClient('/api/ai/rewrite', { method: 'POST', body: JSON.stringify(body) }),
+  chat: (body: Record<string, JsonValue>) =>
+    apiClient('/api/ai/chat', { method: 'POST', body: JSON.stringify(body) }),
+  summariseReviews: (itemId: string) =>
+    apiClient('/api/ai/review-summary', {
+      method: 'POST',
+      body: JSON.stringify({ itemId }),
+    }),
 };

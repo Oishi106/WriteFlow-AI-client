@@ -32,19 +32,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout, hasHydrated } = useAuthStore();
   const pathname = usePathname();
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
 
   useEffect(() => {
     setMounted(true);
-    if (!isAuthenticated) router.push('/login');
-  }, [isAuthenticated, router]);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [hasHydrated, isAuthenticated, router]);
 
   const isDarkTheme = mounted && resolvedTheme === 'dark';
 
-  if (!isAuthenticated) return null;
+  if (!hasHydrated || !isAuthenticated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-center space-y-3">
+          <div className="mx-auto h-10 w-10 rounded-full border-2 border-brand-500 border-t-transparent animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   const isAdmin = user?.role === 'ADMIN';
   const navItems = isAdmin ? [...userNavItems, ...adminNavItems] : userNavItems;
@@ -55,12 +73,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       mobile ? 'w-72' : collapsed ? 'w-16' : 'w-64'
     )}>
       {/* Logo */}
-      <div className={cn('flex items-center h-16 px-4 border-b border-border', collapsed && !mobile ? 'justify-center' : 'gap-3')}>
+      <Link href="/" className={cn('flex items-center h-16 px-4 border-b border-border', collapsed && !mobile ? 'justify-center' : 'gap-3')}>
         <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center flex-shrink-0">
           <Zap className="w-4 h-4 text-white" />
         </div>
         {(!collapsed || mobile) && <span className="font-display font-bold gradient-text">WriteFlow AI</span>}
-      </div>
+      </Link>
 
       {/* Nav */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">

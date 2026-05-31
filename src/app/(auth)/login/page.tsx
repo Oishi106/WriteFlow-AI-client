@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
+import { getSession, signIn, useSession } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,13 +20,22 @@ type FormData = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
-  const { login, isLoading } = useAuthStore();
+  const { isLoading } = useAuthStore();
   const router = useRouter();
+  const { data: session, status } = useSession();
   const { toast } = useToast();
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
+
+  useEffect(() => {
+    if (status !== 'authenticated' || !session?.user) {
+      return;
+    }
+
+    router.replace(session.user.role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
+  }, [router, session, status]);
 
   const fillDemo = (type: 'user' | 'admin') => {
     setValue('email', type === 'admin' ? 'admin@writeflow.com' : 'user@writeflow.com');
@@ -35,9 +44,21 @@ export default function LoginPage() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      const user = await login(data.email, data.password);
+      const result = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        throw new Error(result.error);
+      }
+
+      const nextSession = await getSession();
+      const role = nextSession?.user?.role;
+
       toast({ title: 'Welcome back!', description: 'Login successful.' });
-      router.push(user?.role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
+      router.replace(role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Login failed. Please try again.';
       toast({ title: 'Login failed', description: message, variant: 'destructive' });
@@ -50,9 +71,9 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:w-1/2 animated-gradient flex-col items-center justify-center p-12 relative">
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
         <div className="relative z-10 text-center text-white">
-          <div className="w-16 h-16 bg-white/10 border border-white/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <Link href="/" className="inline-flex w-16 h-16 bg-white/10 border border-white/20 rounded-2xl items-center justify-center mx-auto mb-6 transition-colors hover:bg-white/15">
             <Zap className="w-8 h-8 text-white" />
-          </div>
+          </Link>
           <h2 className="font-display text-4xl font-bold mb-4">WriteFlow AI</h2>
           <p className="text-white/70 text-lg max-w-sm">Your agentic content workspace. Draft 10× faster with AI.</p>
           <div className="mt-12 space-y-4">
