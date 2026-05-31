@@ -78,14 +78,12 @@ export const authApi = {
       response && typeof response === 'object' && 'data' in response
         ? (response as JsonRecord).data
         : response;
+    const record =
+      payload && typeof payload === 'object' ? (payload as JsonRecord) : null;
     const token =
-      payload && typeof payload === 'object' && 'token' in payload
-        ? (payload as JsonRecord).token
-        : undefined;
-    const user =
-      payload && typeof payload === 'object' && 'user' in payload
-        ? (payload as JsonRecord).user
-        : undefined;
+      (record?.accessToken as string | undefined) ||
+      (record?.token as string | undefined);
+    const user = record?.user;
 
     if (typeof window !== 'undefined' && token && user) {
       localStorage.setItem('writeflow_token', String(token));
@@ -132,7 +130,7 @@ export const documentsApi = {
 
 export const ailogsApi = {
   getLogs: (params: Record<string, JsonValue> = {}) =>
-    apiClient(`/api/ailogs${buildQueryString(params)}`),
+    apiClient(`/api/ai/history${buildQueryString(params)}`),
 };
 
 export const usersApi = {

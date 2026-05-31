@@ -8,6 +8,7 @@ type BackendUser = {
   name?: string;
   email?: string;
   role?: 'USER' | 'ADMIN';
+  plan?: string;
 };
 
 type CredentialsUser = {
@@ -18,7 +19,25 @@ type CredentialsUser = {
   token?: string;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_BASE_URL =
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:5000';
+
+const extractAuthPayload = (payload: Record<string, unknown> | null) => {
+  const data = (payload?.data ?? payload) as Record<string, unknown> | undefined;
+  if (!data || typeof data !== 'object') {
+    return { token: undefined, user: undefined };
+  }
+
+  const token =
+    (typeof data.accessToken === 'string' && data.accessToken) ||
+    (typeof data.token === 'string' && data.token) ||
+    undefined;
+  const user = data.user;
+
+  return { token, user: user && typeof user === 'object' ? user : undefined };
+};
 
 const safeJson = async (response: Response) => {
   const text = await response.text();
@@ -35,7 +54,7 @@ export const authOptions: NextAuthOptions = {
     strategy: 'jwt',
   },
   pages: {
-    signIn: '/auth/login',
+    signIn: '/login',
   },
   providers: [
     GoogleProvider({
@@ -65,26 +84,25 @@ export const authOptions: NextAuthOptions = {
         const payload = await safeJson(response);
 
         if (!response.ok) {
-          const message = payload?.message || 'Login failed';
+          const message = payload?.message || 'Invalid email or password';
           throw new Error(message);
         }
 
-        const data = payload?.data ?? payload;
-        const tokenValue = data?.token || data?.accessToken;
-        const userValue = data?.user || data?.data?.user;
+        const { token: tokenValue, user: userValue } = extractAuthPayload(payload);
 
         if (!userValue || !tokenValue) {
-          throw new Error(payload?.message || 'Invalid login response');
+          throw new Error(payload?.message || 'Invalid login response from server');
         }
 
         const user = userValue as BackendUser;
         return {
-          id: user._id || user.id || email,
+          id: String(user._id || user.id || email),
           name: user.name,
           email: user.email || email,
-          role: user.role,
+          role: user.role || 'USER',
+          plan: user.plan,
           token: tokenValue,
-        } as CredentialsUser;
+        } as CredentialsUser & { plan?: string };
       },
     }),
   ],
@@ -126,6 +144,8 @@ export const authOptions: NextAuthOptions = {
         token.role = sessionUser.role;
         token.token = sessionUser.token;
         if (sessionUser.name) token.name = sessionUser.name;
+        const withPlan = sessionUser as CredentialsUser & { plan?: string };
+        if (withPlan.plan) token.plan = withPlan.plan;
       }
 
       if (trigger === 'update' && session) {
@@ -148,6 +168,9 @@ export const authOptions: NextAuthOptions = {
         }
         if (token.avatar !== undefined) {
           (session.user as { avatar?: string }).avatar = token.avatar as string;
+        }
+        if (token.plan) {
+          (session.user as { plan?: string }).plan = token.plan as string;
         }
       }
 

@@ -145,6 +145,8 @@ export const useAuthStore = create<AuthState>()(
       login: async (email: string, password: string) => {
         set({ isLoading: true });
         try {
+          await authApi.login(email, password);
+
           const result = await signIn('credentials', {
             email,
             password,
@@ -152,12 +154,18 @@ export const useAuthStore = create<AuthState>()(
           });
 
           if (result?.error) {
-            throw new Error(result.error);
+            throw new Error(
+              result.error === 'CredentialsSignin'
+                ? 'Invalid email or password'
+                : result.error
+            );
           }
 
           const session = await getSession();
           const user = toAppUser(session);
-          const apiToken = (session?.user as { token?: string })?.token || null;
+          const apiToken =
+            (session?.user as { token?: string })?.token ||
+            (typeof window !== 'undefined' ? localStorage.getItem('writeflow_token') : null);
 
           syncStorage(session?.accessToken, session?.refreshToken);
           syncApiToken(apiToken, user);

@@ -1,312 +1,671 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Loader2, Sparkles, RefreshCw, MessageSquare, Send, Copy, Download, ChevronDown } from 'lucide-react';
-import { aiApi } from '@/lib/api';
-import { useAuthStore } from '@/store/authStore';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import {
+  AlertTriangle,
+  Copy,
+  FileText,
+  Loader2,
+  MessageSquare,
+  RefreshCw,
+  Send,
+} from 'lucide-react';
+import { ApiError, aiApi, documentsApi, itemsApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
-type AgentTab = 'draft' | 'rewrite' | 'chat';
+const DRAFT_TONES = [
+  { label: 'Professional', value: 'Professional' },
+  { label: 'Casual', value: 'Casual' },
+  { label: 'Persuasive', value: 'Persuasive' },
+  { label: 'Friendly', value: 'Friendly' },
+] as const;
 
-const TONES = ['professional', 'casual', 'formal', 'friendly', 'persuasive'];
-const CONTENT_TYPES = [
-  { value: 'blog', label: '✍️ Blog Post' },
-  { value: 'social', label: '📱 Social Caption' },
-  { value: 'email', label: '📧 Email' },
-  { value: 'ad-copy', label: '📢 Ad Copy' },
+const REWRITE_TONES = [
+  { label: 'Formal', value: 'formal' },
+  { label: 'Casual', value: 'casual' },
+  { label: 'Persuasive', value: 'persuasive' },
+  { label: 'Friendly', value: 'friendly' },
+  { label: 'Shorter', value: 'shorter' },
+  { label: 'Longer', value: 'longer' },
+  { label: 'Fix Grammar', value: 'fix-grammar' },
+] as const;
+
+const CHAT_SUGGESTIONS = [
+  'Suggest blog post ideas',
+  'Help me write an intro',
+  'Review my paragraph',
 ];
-const REWRITE_ACTIONS = [
-  { value: 'rewrite', label: 'Rewrite in new tone' },
-  { value: 'shorten', label: 'Shorten (50%)' },
-  { value: 'expand', label: 'Expand (2×)' },
-  { value: 'fix-grammar', label: 'Fix Grammar' },
-  { value: 'improve-clarity', label: 'Improve Clarity' },
-];
 
-interface Message {
-  role: 'user' | 'model';
+type ChatMessage = {
+  role: 'user' | 'ai';
   content: string;
+  timestamp: Date;
+};
+
+const extractContent = (res: unknown): string => {
+  if (!res || typeof res !== 'object') return '';
+  const payload = res as Record<string, unknown>;
+  const data = payload.data;
+  if (data && typeof data === 'object' && typeof (data as Record<string, unknown>).content === 'string') {
+    return (data as { content: string }).content;
+  }
+  return '';
+};
+
+const extractReply = (res: unknown): string => {
+  if (!res || typeof res !== 'object') return '';
+  const payload = res as Record<string, unknown>;
+  const data = payload.data;
+  if (data && typeof data === 'object' && typeof (data as Record<string, unknown>).reply === 'string') {
+    return (data as { reply: string }).reply;
+  }
+  return '';
+};
+
+const getErrorMessage = (err: unknown) =>
+  err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
+
+const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+const formatTime = (date: Date) =>
+  new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).format(date);
+
+function ResultBox({ content }: { content: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background p-4 font-mono text-sm whitespace-pre-wrap max-h-96 overflow-y-auto">
+      {content}
+    </div>
+  );
 }
 
-export default function EditorPage() {
-  const [activeTab, setActiveTab] = useState<AgentTab>('draft');
-  const [loading, setLoading] = useState(false);
+function EditorPageContent() {
+  const { data: session, status } = useSession();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  // Agent 1 state
+  const itemId = searchParams.get('itemId');
+  const docId = searchParams.get('docId');
+
+  // Tab 1 — Content Draft
   const [topic, setTopic] = useState('');
-  const [tone, setTone] = useState('professional');
+  const [topicError, setTopicError] = useState('');
+  const [draftTone, setDraftTone] = useState<string>('Professional');
   const [audience, setAudience] = useState('');
-  const [contentType, setContentType] = useState('blog');
-  const [draftResult, setDraftResult] = useState<{ title?: string; content?: string; metaDescription?: string; tags?: string[] } | null>(null);
+  const [draftResult, setDraftResult] = useState('');
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftError, setDraftError] = useState('');
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [showDocumentsLink, setShowDocumentsLink] = useState(false);
+  const [draftCopied, setDraftCopied] = useState(false);
 
-  // Agent 2 state
-  const [rewriteInput, setRewriteInput] = useState('');
-  const [rewriteTone, setRewriteTone] = useState('formal');
-  const [rewriteAction, setRewriteAction] = useState('rewrite');
+  // Tab 2 — Rewrite
+  const [rewriteText, setRewriteText] = useState('');
+  const [rewriteTextError, setRewriteTextError] = useState('');
+  const [rewriteTone, setRewriteTone] = useState<string>('formal');
   const [rewriteResult, setRewriteResult] = useState('');
+  const [rewriteLoading, setRewriteLoading] = useState(false);
+  const [rewriteError, setRewriteError] = useState('');
+  const [rewriteCopied, setRewriteCopied] = useState(false);
 
-  // Agent 3 state
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Tab 3 — Chat
+  const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [docContext, setDocContext] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => {
+    if (!itemId) return;
+    itemsApi
+      .getItemById(itemId)
+      .then((res) => {
+        const payload = res as Record<string, unknown>;
+        const data = (payload?.data ?? payload) as Record<string, unknown>;
+        const item = (data?.data ?? data) as { title?: string };
+        if (item?.title) setTopic(item.title);
+      })
+      .catch(() => {
+        // leave topic empty
+      });
+  }, [itemId]);
 
-  const handleDraft = async () => {
-    if (!topic.trim()) { toast({ title: 'Topic required', description: 'Enter a topic for your content.', variant: 'destructive' }); return; }
-    setLoading(true);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversationHistory, chatLoading]);
+
+  const copyText = useCallback(async (text: string, setCopied: (value: boolean) => void) => {
     try {
-      const { data } = await aiApi.generate({ topic, tone, targetAudience: audience || 'general', contentType });
-      setDraftResult(data.data);
-      toast({ title: 'Content generated!', description: 'Your draft is ready to edit.' });
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast({ title: 'Generation failed', description: 'Please try again.', variant: 'destructive' });
-    } finally { setLoading(false); }
+      toast({ title: 'Failed to copy', variant: 'destructive' });
+    }
+  }, [toast]);
+
+  const handleGenerate = async () => {
+    if (!topic.trim()) {
+      setTopicError('Topic is required');
+      return;
+    }
+    setTopicError('');
+    setDraftError('');
+    setDraftLoading(true);
+    setShowDocumentsLink(false);
+
+    try {
+      const res = await aiApi.generateContent({
+        title: topic.trim(),
+        topic: topic.trim(),
+        tone: draftTone,
+        audience: audience.trim(),
+      });
+      const content = extractContent(res);
+      if (!content) throw new ApiError('No content returned from AI', 500);
+      setDraftResult(content);
+    } catch (err) {
+      setDraftError(getErrorMessage(err));
+      setDraftResult('');
+    } finally {
+      setDraftLoading(false);
+    }
+  };
+
+  const handleSaveDocument = async () => {
+    if (!draftResult.trim()) return;
+    setSaveLoading(true);
+    const wordCount = countWords(draftResult);
+
+    try {
+      if (docId) {
+        await documentsApi.updateDocument(docId, {
+          content: draftResult,
+          wordCount,
+          status: 'DRAFT',
+        });
+      } else {
+        await documentsApi.createDocument({
+          title: topic.trim(),
+          content: draftResult,
+          status: 'DRAFT',
+          wordCount,
+        });
+      }
+      setShowDocumentsLink(true);
+      toast({ title: 'Document saved!' });
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' });
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   const handleRewrite = async () => {
-    if (!rewriteInput.trim()) { toast({ title: 'Content required', variant: 'destructive' }); return; }
-    setLoading(true);
+    if (!rewriteText.trim()) {
+      setRewriteTextError('Please paste some text to rewrite');
+      return;
+    }
+    setRewriteTextError('');
+    setRewriteError('');
+    setRewriteLoading(true);
+
     try {
-      const { data } = await aiApi.rewrite({ content: rewriteInput, tone: rewriteTone, action: rewriteAction });
-      setRewriteResult(data.data.rewrittenContent);
-      toast({ title: 'Content rewritten!' });
-    } catch {
-      toast({ title: 'Rewrite failed', variant: 'destructive' });
-    } finally { setLoading(false); }
+      const res = await aiApi.rewriteContent({
+        text: rewriteText.trim(),
+        tone: rewriteTone,
+      });
+      const content = extractContent(res);
+      if (!content) throw new ApiError('No rewritten content returned', 500);
+      setRewriteResult(content);
+    } catch (err) {
+      setRewriteError(getErrorMessage(err));
+      setRewriteResult('');
+    } finally {
+      setRewriteLoading(false);
+    }
   };
 
-  const handleChat = async () => {
-    if (!chatInput.trim()) return;
-    const newMessages: Message[] = [...messages, { role: 'user', content: chatInput }];
-    setMessages(newMessages);
+  const handleSendChat = async () => {
+    const message = chatInput.trim();
+    if (!message || chatLoading) return;
+
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: message,
+      timestamp: new Date(),
+    };
+
+    const historyForApi = [...conversationHistory, userMessage].map((h) => ({
+      role: h.role === 'ai' ? 'assistant' : 'user',
+      content: h.content,
+    }));
+
+    setConversationHistory((prev) => [...prev, userMessage]);
     setChatInput('');
-    setLoading(true);
+    setChatLoading(true);
+
     try {
-      const { data } = await aiApi.chat({ messages: newMessages, documentContext: docContext });
-      setMessages([...newMessages, { role: 'model', content: data.data.response }]);
-    } catch {
-      toast({ title: 'Chat failed', variant: 'destructive' });
-    } finally { setLoading(false); }
+      const res = await aiApi.chat({ message, history: historyForApi });
+      const reply = extractReply(res);
+      if (!reply) throw new ApiError('No reply from assistant', 500);
+
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: 'ai', content: reply, timestamp: new Date() },
+      ]);
+    } catch (err) {
+      toast({ title: getErrorMessage(err), variant: 'destructive' });
+    } finally {
+      setChatLoading(false);
+    }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: 'Copied to clipboard!' });
-  };
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="bg-card border border-border rounded-2xl p-8 text-center max-w-md w-full space-y-4">
+          <h1 className="font-display text-xl font-bold">Please log in to use AI features</h1>
+          <p className="text-muted-foreground text-sm">
+            Sign in to generate content, rewrite text, and chat with the writing assistant.
+          </p>
+          <Button asChild className="w-full">
+            <Link href="/login">Log In</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="font-display text-3xl font-bold mb-2">AI Content Editor</h1>
-          <p className="text-muted-foreground">Three powerful AI agents to help you write, rewrite, and brainstorm.</p>
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+        <div>
+          <h1 className="font-display text-3xl font-bold">AI Content Editor</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Draft, rewrite, and brainstorm with three AI agents.
+          </p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 p-1 bg-muted rounded-xl w-fit">
-          {([
-            { id: 'draft', label: '✨ Draft Agent', icon: Sparkles },
-            { id: 'rewrite', label: '🔄 Rewrite Agent', icon: RefreshCw },
-            { id: 'chat', label: '💬 Chat Assistant', icon: MessageSquare },
-          ] as const).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn('px-5 py-2.5 rounded-lg text-sm font-medium transition-all', activeTab === tab.id ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <Tabs defaultValue="draft" className="w-full">
+          <TabsList className="flex flex-wrap h-auto gap-1">
+            <TabsTrigger value="draft" className="gap-2">
+              <FileText className="w-4 h-4" />
+              Content Draft
+            </TabsTrigger>
+            <TabsTrigger value="rewrite" className="gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Rewrite &amp; Tone
+            </TabsTrigger>
+            <TabsTrigger value="chat" className="gap-2">
+              <MessageSquare className="w-4 h-4" />
+              Chat Assistant
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Agent 1: Content Draft */}
-        {activeTab === 'draft' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Tab 1 — Content Draft */}
+          <TabsContent value="draft" className="space-y-6 mt-6">
             <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-              <h2 className="font-semibold">Configure your content</h2>
               <div>
-                <label className="text-sm font-medium block mb-1.5">Content Type</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {CONTENT_TYPES.map(ct => (
-                    <button key={ct.value} onClick={() => setContentType(ct.value)} className={cn('py-2 px-3 rounded-lg border text-sm font-medium transition-all', contentType === ct.value ? 'border-brand-500 bg-brand-500/10 text-brand-500' : 'border-border hover:bg-muted')}>
-                      {ct.label}
-                    </button>
+                <label htmlFor="topic" className="block text-sm font-medium mb-1.5">
+                  Topic <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  id="topic"
+                  value={topic}
+                  onChange={(e) => {
+                    setTopic(e.target.value);
+                    if (topicError) setTopicError('');
+                  }}
+                  placeholder="e.g. 10 tips for remote workers"
+                />
+                {topicError && (
+                  <p className="text-destructive text-sm mt-1">{topicError}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Tone</label>
+                <Select value={draftTone} onValueChange={setDraftTone}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select tone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DRAFT_TONES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label htmlFor="audience" className="block text-sm font-medium mb-1.5">
+                  Target Audience
+                </label>
+                <Input
+                  id="audience"
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  placeholder="e.g. freelancers, marketers"
+                />
+              </div>
+
+              <Button
+                type="button"
+                onClick={handleGenerate}
+                disabled={draftLoading}
+                className="w-full sm:w-auto"
+              >
+                {draftLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    AI is drafting your content...
+                  </>
+                ) : (
+                  'Generate Content'
+                )}
+              </Button>
+            </div>
+
+            {draftError && (
+              <div className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-destructive text-sm">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                {draftError}
+              </div>
+            )}
+
+            {draftResult && (
+              <div className="space-y-4">
+                <ResultBox content={draftResult} />
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button onClick={handleSaveDocument} disabled={saveLoading}>
+                    {saveLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save as Document'
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => copyText(draftResult, setDraftCopied)}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    {draftCopied ? 'Copied!' : 'Copy to Clipboard'}
+                  </Button>
+                  {showDocumentsLink && (
+                    <Link
+                      href="/dashboard/documents"
+                      className="text-sm text-brand-500 hover:underline font-medium"
+                    >
+                      View in Documents →
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Tab 2 — Rewrite */}
+          <TabsContent value="rewrite" className="space-y-6 mt-6">
+            <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
+              <div>
+                <label htmlFor="rewrite-text" className="block text-sm font-medium mb-1.5">
+                  Paste Text
+                </label>
+                <textarea
+                  id="rewrite-text"
+                  value={rewriteText}
+                  onChange={(e) => {
+                    setRewriteText(e.target.value);
+                    if (rewriteTextError) setRewriteTextError('');
+                  }}
+                  rows={6}
+                  placeholder="Paste your text here to rewrite it..."
+                  className={cn(
+                    'flex min-h-[150px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+                    'ring-offset-background placeholder:text-muted-foreground',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                    'resize-y'
+                  )}
+                />
+                {rewriteTextError && (
+                  <p className="text-destructive text-sm mt-1">{rewriteTextError}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Tone</label>
+                <div className="flex flex-wrap gap-2">
+                  {REWRITE_TONES.map((t) => (
+                    <Button
+                      key={t.value}
+                      type="button"
+                      size="sm"
+                      variant={rewriteTone === t.value ? 'default' : 'outline'}
+                      onClick={() => setRewriteTone(t.value)}
+                    >
+                      {t.label}
+                    </Button>
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium block mb-1.5">Topic *</label>
-                <textarea value={topic} onChange={e => setTopic(e.target.value)} rows={3} placeholder="e.g. How to use AI for content marketing in 2025" className="w-full px-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm resize-none" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium block mb-1.5">Tone</label>
-                  <select value={tone} onChange={e => setTone(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                    {TONES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium block mb-1.5">Target Audience</label>
-                  <input value={audience} onChange={e => setAudience(e.target.value)} placeholder="e.g. Marketers, Devs" className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-                </div>
-              </div>
-              <button onClick={handleDraft} disabled={loading} className="w-full py-3 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Generating...</> : <><Sparkles className="w-4 h-4" />Generate Content</>}
-              </button>
+
+              <Button
+                type="button"
+                onClick={handleRewrite}
+                disabled={rewriteLoading}
+                className="w-full sm:w-auto"
+              >
+                {rewriteLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Rewriting...
+                  </>
+                ) : (
+                  'Rewrite'
+                )}
+              </Button>
             </div>
 
-            <div className="bg-card border border-border rounded-2xl p-6">
-              {draftResult ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-semibold">Generated Content</h2>
-                    <button onClick={() => copyToClipboard(`${draftResult.title}\n\n${draftResult.content}`)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-                      <Copy className="w-3.5 h-3.5" /> Copy all
-                    </button>
-                  </div>
-                  {draftResult.title && <div className="p-3 bg-brand-500/5 border border-brand-500/20 rounded-xl"><p className="text-xs text-brand-500 font-medium mb-1">Title</p><p className="font-semibold text-sm">{draftResult.title}</p></div>}
-                  {draftResult.metaDescription && <div className="p-3 bg-muted rounded-xl"><p className="text-xs text-muted-foreground font-medium mb-1">Meta Description</p><p className="text-sm">{draftResult.metaDescription}</p></div>}
-                  {draftResult.tags && <div className="flex flex-wrap gap-2">{draftResult.tags.map(tag => <span key={tag} className="px-2 py-0.5 bg-brand-500/10 text-brand-500 text-xs rounded-full">#{tag}</span>)}</div>}
-                  <div className="border-t border-border pt-4 max-h-64 overflow-y-auto">
-                    <p className="text-xs text-muted-foreground font-medium mb-2">Content</p>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{draftResult.content}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                  <Sparkles className="w-10 h-10 text-brand-500/30 mb-4" />
-                  <p className="text-muted-foreground">Your generated content will appear here.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Agent 2: Rewrite */}
-        {activeTab === 'rewrite' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-              <h2 className="font-semibold">Rewrite & Tone Agent</h2>
-              <div>
-                <label className="text-sm font-medium block mb-1.5">Your Text *</label>
-                <textarea value={rewriteInput} onChange={e => setRewriteInput(e.target.value)} rows={8} placeholder="Paste the text you want to rewrite..." className="w-full px-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm resize-none" />
-                <p className="text-xs text-muted-foreground mt-1">{rewriteInput.length}/5000 characters</p>
+            {rewriteError && (
+              <div className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-destructive text-sm">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                {rewriteError}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium block mb-1.5">Action</label>
-                  <select value={rewriteAction} onChange={e => setRewriteAction(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                    {REWRITE_ACTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium block mb-1.5">Tone</label>
-                  <select value={rewriteTone} onChange={e => setRewriteTone(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                    {TONES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                  </select>
+            )}
+
+            {rewriteResult && (
+              <div className="space-y-4">
+                <ResultBox content={rewriteResult} />
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setRewriteText(rewriteResult)}
+                  >
+                    Replace Original
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => copyText(rewriteResult, setRewriteCopied)}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    {rewriteCopied ? 'Copied!' : 'Copy to Clipboard'}
+                  </Button>
                 </div>
               </div>
-              <button onClick={handleRewrite} disabled={loading} className="w-full py-3 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Rewriting...</> : <><RefreshCw className="w-4 h-4" />Rewrite Now</>}
-              </button>
-            </div>
+            )}
+          </TabsContent>
 
-            <div className="bg-card border border-border rounded-2xl p-6">
-              {rewriteResult ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-semibold">Rewritten Content</h2>
-                    <button onClick={() => copyToClipboard(rewriteResult)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-                      <Copy className="w-3.5 h-3.5" /> Copy
-                    </button>
-                  </div>
-                  <div className="p-4 bg-muted rounded-xl max-h-96 overflow-y-auto">
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{rewriteResult}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                  <RefreshCw className="w-10 h-10 text-brand-500/30 mb-4" />
-                  <p className="text-muted-foreground">Rewritten content will appear here.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Agent 3: Chat */}
-        {activeTab === 'chat' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-card border border-border rounded-2xl flex flex-col h-[600px]">
-              <div className="p-4 border-b border-border flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-brand-500" />
-                <h2 className="font-semibold">AI Writing Assistant</h2>
+          {/* Tab 3 — Chat */}
+          <TabsContent value="chat" className="mt-6">
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h2 className="font-semibold text-sm">Chat Assistant</h2>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" disabled={conversationHistory.length === 0}>
+                      Clear Chat
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Clear this conversation?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => setConversationHistory([])}>
+                        Clear
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.length === 0 && (
-                  <div className="text-center py-12">
-                    <MessageSquare className="w-10 h-10 text-brand-500/30 mx-auto mb-3" />
-                    <p className="text-muted-foreground text-sm">Ask me anything about writing, brainstorming, or improving your content.</p>
-                    <div className="mt-4 grid grid-cols-1 gap-2 max-w-xs mx-auto">
-                      {['Give me 5 blog post ideas about AI', 'How do I write a compelling headline?', 'Create an outline for an article about climate change'].map(s => (
-                        <button key={s} onClick={() => setChatInput(s)} className="text-xs text-left px-3 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors text-muted-foreground hover:text-foreground">{s}</button>
+              <div
+                ref={messageListRef}
+                className="flex flex-col gap-3 min-h-64 max-h-96 overflow-y-auto p-4"
+              >
+                {conversationHistory.length === 0 && !chatLoading && (
+                  <div className="flex flex-col items-center justify-center text-center py-8 gap-4">
+                    <p className="text-muted-foreground text-sm max-w-sm">
+                      Hi! I&apos;m your writing assistant. Ask me anything about your content.
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {CHAT_SUGGESTIONS.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setChatInput(s)}
+                          className="text-xs px-3 py-1.5 rounded-full border border-border bg-muted/50 hover:bg-muted transition-colors"
+                        >
+                          {s}
+                        </button>
                       ))}
                     </div>
                   </div>
                 )}
-                {messages.map((msg, i) => (
-                  <div key={i} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
-                    <div className={cn('max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed', msg.role === 'user' ? 'bg-brand-500 text-white' : 'bg-muted text-foreground')}>
+
+                {conversationHistory.map((msg, index) => (
+                  <div
+                    key={`${msg.timestamp.getTime()}-${index}`}
+                    className={cn('flex flex-col max-w-[85%]', msg.role === 'user' ? 'ml-auto items-end' : 'items-start')}
+                  >
+                    <div
+                      className={cn(
+                        'rounded-lg px-4 py-2 text-sm',
+                        msg.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-muted text-foreground'
+                      )}
+                    >
                       {msg.content}
                     </div>
+                    <span className="text-[10px] text-muted-foreground mt-1">
+                      {formatTime(msg.timestamp)}
+                    </span>
                   </div>
                 ))}
-                {loading && (
-                  <div className="flex justify-start">
-                    <div className="bg-muted px-4 py-3 rounded-2xl">
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+
+                {chatLoading && (
+                  <div className="flex items-start">
+                    <div className="bg-muted rounded-lg px-4 py-3 flex gap-1">
+                      <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
+                      <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+                      <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
                     </div>
                   </div>
                 )}
+
                 <div ref={chatEndRef} />
               </div>
 
-              <div className="p-4 border-t border-border">
-                <div className="flex gap-2">
-                  <input
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleChat()}
-                    placeholder="Ask anything about writing..."
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                  <button onClick={handleChat} disabled={loading || !chatInput.trim()} className="p-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl transition-colors disabled:opacity-60">
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
+              <div className="p-4 border-t border-border flex gap-2">
+                <Input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleSendChat();
+                    }
+                  }}
+                  placeholder="Type your message..."
+                  disabled={chatLoading}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  onClick={() => void handleSendChat()}
+                  disabled={chatLoading || !chatInput.trim()}
+                  size="icon"
+                  aria-label="Send message"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
               </div>
             </div>
-
-            <div className="bg-card border border-border rounded-2xl p-5">
-              <h3 className="font-semibold mb-3 text-sm">Document Context (Optional)</h3>
-              <p className="text-xs text-muted-foreground mb-3">Paste your current document text so the assistant can give contextual advice.</p>
-              <textarea
-                value={docContext}
-                onChange={e => setDocContext(e.target.value)}
-                rows={10}
-                placeholder="Paste your document content here..."
-                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
-              />
-              <p className="text-xs text-muted-foreground mt-2">{docContext.length}/500 characters used</p>
-            </div>
-          </div>
-        )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
+  );
+}
+
+function EditorPageFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+    </div>
+  );
+}
+
+export default function EditorPage() {
+  return (
+    <Suspense fallback={<EditorPageFallback />}>
+      <EditorPageContent />
+    </Suspense>
   );
 }

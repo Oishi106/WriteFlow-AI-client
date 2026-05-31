@@ -20,7 +20,8 @@ type FormData = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
-  const { isLoading } = useAuthStore();
+  const [submitting, setSubmitting] = useState(false);
+  const { login, isLoading } = useAuthStore();
   const router = useRouter();
   const { data: session, status } = useSession();
   const { toast } = useToast();
@@ -37,32 +38,38 @@ export default function LoginPage() {
     router.replace((session.user as any).role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
   }, [router, session, status]);
 
-  const fillDemo = (type: 'user' | 'admin') => {
-    setValue('email', type === 'admin' ? 'admin@writeflow.com' : 'user@writeflow.com');
-    setValue('password', '123456');
-  };
-
   const onSubmit = async (data: FormData) => {
+    setSubmitting(true);
     try {
-      const result = await signIn('credentials', {
-        email: data.email,
-        password: data.password,
-        redirect: false,
-      });
+      const user = await login(data.email.trim(), data.password);
 
-      if (result?.error) {
-        throw new Error(result.error);
+      if (!user) {
+        throw new Error('Invalid email or password');
       }
 
       const nextSession = await getSession();
-      const role = (nextSession?.user as any)?.role;
+      const role = (nextSession?.user as { role?: string })?.role ?? user.role;
 
       toast({ title: 'Welcome back!', description: 'Login successful.' });
       router.replace(role === 'ADMIN' ? '/admin/analytics' : '/dashboard');
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Login failed. Please try again.';
+      const raw = err instanceof Error ? err.message : '';
+      const message =
+        raw === 'CredentialsSignin' || !raw
+          ? 'Invalid email or password. Try Demo User Login or create an account.'
+          : raw;
       toast({ title: 'Login failed', description: message, variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  const fillDemo = async (type: 'user' | 'admin') => {
+    const email = type === 'admin' ? 'admin@writeflow.com' : 'user@writeflow.com';
+    const password = '123456';
+    setValue('email', email);
+    setValue('password', password);
+    await onSubmit({ email, password });
   };
 
   return (
@@ -114,10 +121,20 @@ export default function LoginPage() {
 
           {/* Demo Buttons */}
           <div className="flex gap-3 mb-6">
-            <button onClick={() => fillDemo('user')} className="flex-1 py-2.5 text-xs font-semibold border border-border rounded-lg hover:bg-muted transition-colors">
+            <button
+              type="button"
+              disabled={submitting || isLoading}
+              onClick={() => void fillDemo('user')}
+              className="flex-1 py-2.5 text-xs font-semibold border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-60"
+            >
               Demo User Login
             </button>
-            <button onClick={() => fillDemo('admin')} className="flex-1 py-2.5 text-xs font-semibold border border-brand-500/50 text-brand-500 rounded-lg hover:bg-brand-500/5 transition-colors">
+            <button
+              type="button"
+              disabled={submitting || isLoading}
+              onClick={() => void fillDemo('admin')}
+              className="flex-1 py-2.5 text-xs font-semibold border border-brand-500/50 text-brand-500 rounded-lg hover:bg-brand-500/5 transition-colors disabled:opacity-60"
+            >
               Demo Admin Login
             </button>
           </div>
@@ -160,10 +177,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={submitting || isLoading}
               className="w-full py-3 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</> : 'Sign In'}
+              {submitting || isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</> : 'Sign In'}
             </button>
           </form>
 
