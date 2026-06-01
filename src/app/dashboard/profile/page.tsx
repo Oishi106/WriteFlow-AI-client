@@ -101,7 +101,7 @@ const uploadToCloudinary = async (file: File): Promise<string> => {
 
 export default function ProfilePage() {
   const { user: storeUser, updateUser, hasHydrated, isAuthenticated } = useAuthStore();
-  const { update: updateSession } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -225,9 +225,19 @@ export default function ProfilePage() {
       };
       if (avatarUrl) body.avatar = avatarUrl;
 
-      await usersApi.updateMe(body);
+      const sessionToken = (session?.user as { token?: string } | undefined)?.token;
+      const apiToken =
+        (typeof window !== 'undefined'
+          ? localStorage.getItem('writeflow_token') || localStorage.getItem('accessToken')
+          : null) || sessionToken;
 
-      const freshRes = await usersApi.getMe();
+      if (!apiToken) {
+        throw new ApiError('Your session expired. Please sign out and sign in again.', 401);
+      }
+
+      await usersApi.updateMe(body, apiToken);
+
+      const freshRes = await usersApi.getMe(apiToken);
       const confirmed = parseUser(freshRes);
 
       if (!confirmed || confirmed.name !== body.name) {
@@ -247,11 +257,15 @@ export default function ProfilePage() {
         updatedAt: new Date().toISOString(),
       });
 
-      await updateSession({
-        name: confirmed.name,
-        bio: confirmed.bio ?? body.bio,
-        avatar: confirmed.avatar ?? avatarUrl,
-      });
+      try {
+        await updateSession({
+          name: confirmed.name,
+          bio: confirmed.bio ?? body.bio,
+          avatar: confirmed.avatar ?? avatarUrl,
+        });
+      } catch {
+        // Profile is saved on the server; session refresh is best-effort
+      }
 
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);

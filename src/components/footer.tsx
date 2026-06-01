@@ -4,14 +4,17 @@ import { SiteShell } from "@/components/site-shell";
 
 const footerLinks = {
   product: [
-    { href: "#features", label: "Features" },
-    { href: "#workflow", label: "Workflow" },
-    { href: "#pricing", label: "Pricing" },
+    { href: "/", label: "Features" },
+    { href: "/explore", label: "Templates" },
+    { href: "/blog", label: "Blog" },
   ],
   company: [
     { href: "/about", label: "About" },
     { href: "/blog", label: "Blog" },
     { href: "/contact", label: "Contact" },
+    { href: "/privacy", label: "Privacy" },
+    { href: "/terms", label: "Terms" },
+    { href: "/cookies", label: "Cookies" },
   ],
 };
 

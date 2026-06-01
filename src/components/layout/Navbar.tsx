@@ -20,10 +20,11 @@ const authNavLinks = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/documents', label: 'My Documents', icon: FileText },
   { href: '/explore', label: 'Explore' },
+  { href: '/blog', label: 'Blog' },
 ];
 
 export default function Navbar() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -153,22 +154,31 @@ export default function Navbar() {
             >
               {isDarkTheme ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
-            <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-              {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="p-2 rounded-lg hover:bg-muted transition-colors"
+              aria-expanded={menuOpen}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
       </div>
 
       {/* Mobile Menu */}
-      {isOpen && (
-        <div className="md:hidden bg-card border-b border-border shadow-lg">
+      <div
+        className={cn(
+          'md:hidden bg-card border-b border-border shadow-lg',
+          menuOpen ? 'block' : 'hidden'
+        )}
+      >
           <div className="px-4 py-4 space-y-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                onClick={() => setIsOpen(false)}
+                onClick={() => setMenuOpen(false)}
                 className={cn(
                   'block px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                   pathname === link.href
@@ -181,22 +191,21 @@ export default function Navbar() {
             ))}
             {!isAuthenticated && (
               <div className="pt-3 flex flex-col gap-2">
-                <Link href="/login" onClick={() => setIsOpen(false)} className="block px-3 py-2 text-sm font-medium text-center border border-border rounded-lg hover:bg-muted transition-colors">
+                <Link href="/login" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm font-medium text-center border border-border rounded-lg hover:bg-muted transition-colors">
                   Sign in
                 </Link>
-                <Link href="/register" onClick={() => setIsOpen(false)} className="block px-3 py-2 text-sm font-medium text-center bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors">
+                <Link href="/register" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm font-medium text-center bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors">
                   Start Free
                 </Link>
               </div>
             )}
             {isAuthenticated && (
-              <button onClick={() => { logout(); setIsOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-destructive hover:bg-muted transition-colors">
+              <button onClick={() => { logout(); setMenuOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-destructive hover:bg-muted transition-colors">
                 Logout
               </button>
             )}
           </div>
         </div>
-      )}
     </nav>
   );
 }

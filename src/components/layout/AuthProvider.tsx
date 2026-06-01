@@ -16,6 +16,15 @@ function AuthSync() {
     syncSession(status === 'authenticated' ? session : null);
   }, [session, status, syncSession]);
 
+  useEffect(() => {
+    if (status !== 'authenticated' || !session?.user) return;
+
+    const apiToken = (session.user as { token?: string }).token;
+    if (apiToken) {
+      localStorage.setItem('writeflow_token', apiToken);
+    }
+  }, [session, status]);
+
   return null;
 }
 

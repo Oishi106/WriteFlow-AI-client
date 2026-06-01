@@ -2,11 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FileText, Zap, TrendingUp, Clock, ArrowRight, Plus } from 'lucide-react';
+import {
+  FileText,
+  Zap,
+  TrendingUp,
+  Clock,
+  ArrowRight,
+  PenLine,
+  RefreshCw,
+  BookOpen,
+} from 'lucide-react';
 import { dashboardApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { formatNumber } from '@/lib/utils';
 import { useSession } from 'next-auth/react';
+import { cn } from '@/lib/utils';
 
 interface MyStats {
   totalDocuments: number;
@@ -29,13 +39,14 @@ export default function DashboardPage() {
       return;
     }
 
-    dashboardApi.getMyStats(token)
-      .then((r: any) => {
-        // ব্যাকএন্ডের রেসপন্স স্ট্রাকচার অনুযায়ী ডাটা সেট করা হচ্ছে
-        if (r && r.data) {
-          setStats(r.data);
-        } else if (r && r.totalDocuments !== undefined) {
-          setStats(r as MyStats);
+    dashboardApi
+      .getMyStats(token)
+      .then((r: unknown) => {
+        const res = r as { data?: MyStats } & Partial<MyStats>;
+        if (res?.data) {
+          setStats(res.data);
+        } else if (res?.totalDocuments !== undefined) {
+          setStats(res as MyStats);
         }
       })
       .catch(() => {})
@@ -43,86 +54,130 @@ export default function DashboardPage() {
   }, [session?.user?.token]);
 
   const statCards = [
-    { label: 'Total Documents', value: stats?.totalDocuments ?? 0, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { label: 'This Month', value: stats?.documentsThisMonth ?? 0, icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10' },
-    { label: 'AI Calls Made', value: stats?.totalAICalls ?? 0, icon: Zap, color: 'text-brand-500', bg: 'bg-brand-500/10' },
-    { label: 'Words Generated', value: stats?.totalTokensUsed ? Math.floor(stats.totalTokensUsed * 0.75) : 0, icon: Clock, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    {
+      label: 'Total Documents',
+      value: stats?.totalDocuments ?? 0,
+      icon: FileText,
+      iconClass: 'wf-pro-icon-circle-blue',
+    },
+    {
+      label: 'This Month',
+      value: stats?.documentsThisMonth ?? 0,
+      icon: TrendingUp,
+      iconClass: 'wf-pro-icon-circle-green',
+    },
+    {
+      label: 'AI Calls Made',
+      value: stats?.totalAICalls ?? 0,
+      icon: Zap,
+      iconClass: 'wf-pro-icon-circle-purple',
+    },
+    {
+      label: 'Words Generated',
+      value: stats?.totalTokensUsed ? Math.floor(stats.totalTokensUsed * 0.75) : 0,
+      icon: Clock,
+      iconClass: 'wf-pro-icon-circle-pink',
+    },
+  ];
+
+  const quickActions = [
+    {
+      title: 'Draft a Blog Post',
+      desc: 'Use the Content Draft Agent',
+      href: '/editor?type=blog',
+      icon: PenLine,
+      cardClass: 'wf-pro-action-card-blue',
+      iconClass: 'wf-pro-icon-square-blue',
+    },
+    {
+      title: 'Rewrite Content',
+      desc: 'Change tone, shorten, or expand',
+      href: '/editor?type=rewrite',
+      icon: RefreshCw,
+      cardClass: 'wf-pro-action-card-purple',
+      iconClass: 'wf-pro-icon-square-purple',
+    },
+    {
+      title: 'Browse Templates',
+      desc: 'Find the perfect starting point',
+      href: '/explore',
+      icon: BookOpen,
+      cardClass: 'wf-pro-action-card-amber',
+      iconClass: 'wf-pro-icon-square-amber',
+    },
   ];
 
   return (
     <div className="space-y-8">
-      {/* Welcome */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Welcome back, {user?.name?.split(' ')[0]} 👋</h1>
-          <p className="text-muted-foreground text-sm mt-1">Here&apos;s what&apos;s happening with your content workspace.</p>
-        </div>
-        <Link
-          href="/editor"
-          className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-xl transition-colors"
-        >
-          <Plus className="w-4 h-4" /> New Document
-        </Link>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-white">
+          Welcome back, {user?.name?.split(' ')[0]} 👋
+        </h1>
+        <p className="mt-1 text-sm text-slate-400">
+          Here&apos;s what&apos;s happening with your content workspace.
+        </p>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card, i) => (
-          <div key={i} className="bg-card border border-border rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-muted-foreground text-sm">{card.label}</p>
-              <div className={`w-9 h-9 ${card.bg} rounded-xl flex items-center justify-center`}>
-                <card.icon className={`w-4 h-4 ${card.color}`} />
+          <div key={i} className="wf-pro-stat-card">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm text-slate-400">{card.label}</p>
+              <div className={card.iconClass}>
+                <card.icon className="h-4 w-4" />
               </div>
             </div>
             {loading ? (
-              <div className="skeleton h-8 w-20" />
+              <div className="h-9 w-24 animate-pulse rounded-lg bg-white/5" />
             ) : (
-              <p className="font-display text-3xl font-bold">{formatNumber(card.value)}</p>
+              <p className="text-3xl font-bold text-white">{formatNumber(card.value)}</p>
             )}
           </div>
         ))}
       </div>
 
-      {/* Plan Status */}
-      <div className="bg-gradient-to-br from-brand-500/10 to-brand-600/5 border border-brand-500/20 rounded-2xl p-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-semibold px-2 py-0.5 bg-brand-500/20 text-brand-500 rounded-full uppercase">{user?.plan} Plan</span>
+      <div className="wf-pro-upgrade-wrap">
+        <div className="wf-pro-upgrade-inner">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="wf-pro-plan-badge">{user?.plan || 'FREE'} Plan</span>
+              </div>
+              <h3 className="font-semibold text-white">
+                {user?.plan === 'FREE'
+                  ? 'Upgrade to unlock more AI power'
+                  : 'You have full access to all features'}
+              </h3>
+              <p className="mt-1 text-sm text-slate-400">
+                {user?.plan === 'FREE'
+                  ? 'Get 100 documents/month, 3 AI agents, and team collaboration.'
+                  : 'Enjoy unlimited content generation with all AI agents.'}
+              </p>
             </div>
-            <h3 className="font-semibold">
-              {user?.plan === 'FREE' ? 'Upgrade to unlock more AI power' : 'You have full access to all features'}
-            </h3>
-            <p className="text-muted-foreground text-sm mt-1">
-              {user?.plan === 'FREE' ? 'Get 100 documents/month, 3 AI agents, and team collaboration.' : 'Enjoy unlimited content generation with all AI agents.'}
-            </p>
+            {user?.plan === 'FREE' && (
+              <Link href="/#pricing" className="wf-pro-cta shrink-0 whitespace-nowrap">
+                Upgrade Plan
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
           </div>
-          {user?.plan === 'FREE' && (
-            <Link href="/#pricing" className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 text-white text-sm font-semibold rounded-xl hover:bg-brand-600 transition-colors whitespace-nowrap">
-              Upgrade Plan <ArrowRight className="w-4 h-4" />
-            </Link>
-          )}
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div>
-        <h2 className="font-semibold text-lg mb-4">Quick actions</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[
-            { title: 'Draft a Blog Post', desc: 'Use the Content Draft Agent', href: '/editor?type=blog', emoji: '✍️' },
-            { title: 'Rewrite Content', desc: 'Change tone, shorten, or expand', href: '/editor?type=rewrite', emoji: '🔄' },
-            { title: 'Browse Templates', desc: 'Find the perfect starting point', href: '/explore', emoji: '📚' },
-          ].map((action, i) => (
+        <h2 className="mb-4 text-lg font-semibold text-white">Quick actions</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {quickActions.map((action, i) => (
             <Link
               key={i}
               href={action.href}
-              className="group p-5 bg-card border border-border rounded-2xl hover:border-brand-500/30 transition-all card-hover"
+              className={cn('wf-pro-action-card group', action.cardClass)}
             >
-              <div className="text-3xl mb-3">{action.emoji}</div>
-              <h3 className="font-semibold text-sm">{action.title}</h3>
-              <p className="text-muted-foreground text-xs mt-1">{action.desc}</p>
+              <div className={action.iconClass}>
+                <action.icon className="h-5 w-5" />
+              </div>
+              <h3 className="text-sm font-semibold text-white">{action.title}</h3>
+              <p className="mt-1 text-xs text-slate-400">{action.desc}</p>
             </Link>
           ))}
         </div>

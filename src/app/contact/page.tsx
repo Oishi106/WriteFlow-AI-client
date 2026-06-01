@@ -32,7 +32,13 @@ export default function ContactPage() {
 
   const contactInfo = [
     { icon: Mail, label: 'Email Us', value: 'hello@writeflow.ai', link: 'mailto:hello@writeflow.ai' },
-    { icon: MessageSquare, label: 'Live Chat', value: 'Available in the app dashboard', link: '#' },
+    {
+      icon: MessageSquare,
+      label: 'Live Chat',
+      value: 'Live Chat (Coming Soon)',
+      link: 'mailto:support@writeflow.ai',
+      comingSoon: true,
+    },
     { icon: Clock, label: 'Response Time', value: 'Within 24 hours on business days', link: null },
   ];
 
@@ -60,8 +66,18 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <p className="font-medium text-sm">{info.label}</p>
-                    {info.link ? (
-                      <a href={info.link} className="text-muted-foreground text-sm hover:text-brand-500 transition-colors">{info.value}</a>
+                    {'comingSoon' in info && info.comingSoon ? (
+                      <a
+                        href={info.link}
+                        className="text-muted-foreground text-sm hover:text-brand-500 transition-colors"
+                        title="Email support while live chat is unavailable"
+                      >
+                        {info.value}
+                      </a>
+                    ) : info.link ? (
+                      <a href={info.link} className="text-muted-foreground text-sm hover:text-brand-500 transition-colors">
+                        {info.value}
+                      </a>
                     ) : (
                       <p className="text-muted-foreground text-sm">{info.value}</p>
                     )}

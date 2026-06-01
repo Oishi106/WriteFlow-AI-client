@@ -40,8 +40,10 @@ const agentColors: Record<string, string> = {
   'Review Summariser': 'bg-orange-500/10 text-orange-700 dark:text-orange-400',
 };
 
-const truncate = (text: string, max = 60) =>
-  text.length <= max ? text : `${text.slice(0, max)}…`;
+const truncate = (text: string | null | undefined, max = 60) => {
+  if (!text) return '';
+  return text.length <= max ? text : `${text.slice(0, max)}…`;
+};
 
 export default function AIHistoryPage() {
   const [logs, setLogs] = useState<AILogItem[]>([]);
@@ -198,7 +200,7 @@ export default function AIHistoryPage() {
                   >
                     {truncate(log.promptSnippet)}
                   </TableCell>
-                  <TableCell>{log.tokensUsed.toLocaleString()}</TableCell>
+                  <TableCell>{Number(log.tokensUsed ?? 0).toLocaleString()}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -216,7 +218,7 @@ export default function AIHistoryPage() {
                 <p className="text-sm" title={log.promptSnippet}>
                   {truncate(log.promptSnippet)}
                 </p>
-                <p className="text-sm font-medium">{log.tokensUsed.toLocaleString()} tokens</p>
+                <p className="text-sm font-medium">{Number(log.tokensUsed ?? 0).toLocaleString()} tokens</p>
               </div>
             ))}
           </div>

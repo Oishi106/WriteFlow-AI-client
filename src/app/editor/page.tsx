@@ -6,18 +6,19 @@ import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   AlertTriangle,
+  ArrowLeft,
   Copy,
   FileText,
   Loader2,
   MessageSquare,
   RefreshCw,
   Send,
+  Sparkles,
+  Zap,
 } from 'lucide-react';
 import { ApiError, aiApi, documentsApi, itemsApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -87,18 +88,83 @@ const extractReply = (res: unknown): string => {
   return '';
 };
 
-const getErrorMessage = (err: unknown) =>
-  err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
+const getErrorMessage = (err: unknown) => {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof TypeError) {
+    return 'Could not reach the server. Check your connection and try again.';
+  }
+  return 'Something went wrong. Please try again.';
+};
 
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
 const formatTime = (date: Date) =>
   new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).format(date);
 
-function ResultBox({ content }: { content: string }) {
+const TAB_ORDER = ['draft', 'rewrite', 'chat'] as const;
+
+function EditorBackground() {
   return (
-    <div className="rounded-lg border border-border bg-background p-4 font-mono text-sm whitespace-pre-wrap max-h-96 overflow-y-auto">
-      {content}
+    <div className="editor-pro-mesh" aria-hidden>
+      <div className="editor-pro-grid" />
+      <div className="editor-pro-blob editor-pro-blob-1" />
+      <div className="editor-pro-blob editor-pro-blob-2" />
+      <div className="editor-pro-blob editor-pro-blob-3" />
+    </div>
+  );
+}
+
+function FieldLabel({ htmlFor, children, required }: { htmlFor?: string; children: React.ReactNode; required?: boolean }) {
+  return (
+    <label htmlFor={htmlFor} className="editor-pro-label">
+      <span className="editor-pro-label-dot" />
+      {children}
+      {required && <span className="text-red-400">*</span>}
+    </label>
+  );
+}
+
+function PrimaryCta({
+  onClick,
+  disabled,
+  loading,
+  loadingText,
+  children,
+  icon: Icon = Sparkles,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  loadingText?: string;
+  children: React.ReactNode;
+  icon?: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled || loading} className="editor-pro-cta">
+      {loading ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {loadingText}
+        </>
+      ) : (
+        <>
+          <Icon className="h-4 w-4" />
+          {children}
+        </>
+      )}
+    </button>
+  );
+}
+
+function ResultBox({ content }: { content: string }) {
+  return <div className="editor-pro-result">{content}</div>;
+}
+
+function EditorLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="editor-pro editor-pro-shell">
+      <EditorBackground />
+      <div className="relative z-10">{children}</div>
     </div>
   );
 }
@@ -136,6 +202,7 @@ function EditorPageContent() {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('draft');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
 
@@ -285,64 +352,101 @@ function EditorPageContent() {
     }
   };
 
+  const tabIndex = TAB_ORDER.indexOf(activeTab as (typeof TAB_ORDER)[number]);
+
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
-      </div>
+      <EditorLayout>
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+        </div>
+      </EditorLayout>
     );
   }
 
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-6">
-        <div className="bg-card border border-border rounded-2xl p-8 text-center max-w-md w-full space-y-4">
-          <h1 className="font-display text-xl font-bold">Please log in to use AI features</h1>
-          <p className="text-muted-foreground text-sm">
-            Sign in to generate content, rewrite text, and chat with the writing assistant.
-          </p>
-          <Button asChild className="w-full">
-            <Link href="/login">Log In</Link>
-          </Button>
+      <EditorLayout>
+        <div className="flex min-h-screen items-center justify-center p-6">
+          <div className="editor-pro-glass w-full max-w-md space-y-5 p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20">
+              <Zap className="h-7 w-7 text-blue-400" />
+            </div>
+            <h1 className="text-xl font-bold text-white">Please log in to use AI features</h1>
+            <p className="text-sm text-slate-400">
+              Sign in to generate content, rewrite text, and chat with the writing assistant.
+            </p>
+            <Link href="/login" className="editor-pro-cta w-full">
+              <Sparkles className="h-4 w-4" />
+              Log In
+            </Link>
+          </div>
         </div>
-      </div>
+      </EditorLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
-        <div>
-          <h1 className="font-display text-3xl font-bold">AI Content Editor</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Draft, rewrite, and brainstorm with three AI agents.
-          </p>
-        </div>
+    <EditorLayout>
+      <div className="mx-auto max-w-5xl px-4 pb-16 pt-6 sm:px-6">
+        <Link href="/dashboard" className="editor-pro-back mb-6">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Link>
 
-        <Tabs defaultValue="draft" className="w-full">
-          <TabsList className="flex flex-wrap h-auto gap-1">
-            <TabsTrigger value="draft" className="gap-2">
-              <FileText className="w-4 h-4" />
-              Content Draft
-            </TabsTrigger>
-            <TabsTrigger value="rewrite" className="gap-2">
-              <RefreshCw className="w-4 h-4" />
-              Rewrite &amp; Tone
-            </TabsTrigger>
-            <TabsTrigger value="chat" className="gap-2">
-              <MessageSquare className="w-4 h-4" />
-              Chat Assistant
-            </TabsTrigger>
-          </TabsList>
+        {/* Hero header */}
+        <header className="editor-pro-hero mb-8">
+          <div className="relative z-10">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-blue-300">
+              <Sparkles className="h-3.5 w-3.5" />
+              Powered by WriteFlow AI
+            </div>
+            <h1 className="editor-pro-title">AI Content Editor</h1>
+            <p className="mt-3 max-w-xl text-sm text-slate-400 sm:text-base">
+              Draft, rewrite, and brainstorm with three intelligent agents — built for premium content workflows.
+            </p>
+          </div>
+        </header>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          {/* Pill tabs + sliding indicator */}
+          <div className="editor-pro-tabs-wrap">
+            <TabsList className="editor-pro-tabs">
+              <TabsTrigger value="draft" className="editor-pro-tab flex-1">
+                <FileText className="h-4 w-4" />
+                Content Draft
+              </TabsTrigger>
+              <TabsTrigger value="rewrite" className="editor-pro-tab flex-1">
+                <RefreshCw className="h-4 w-4" />
+                Rewrite &amp; Tone
+              </TabsTrigger>
+              <TabsTrigger value="chat" className="editor-pro-tab flex-1">
+                <MessageSquare className="h-4 w-4" />
+                Chat Assistant
+              </TabsTrigger>
+            </TabsList>
+            <div className="relative mt-3 h-0.5 overflow-hidden rounded-full bg-white/5">
+              <div
+                className="editor-pro-tab-indicator top-0"
+                style={{
+                  width: `${100 / TAB_ORDER.length}%`,
+                  transform: `translateX(${Math.max(0, tabIndex) * 100}%)`,
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="relative mt-8">
+            <div className="editor-pro-card-glow" aria-hidden />
 
           {/* Tab 1 — Content Draft */}
-          <TabsContent value="draft" className="space-y-6 mt-6">
-            <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
+          <TabsContent value="draft" className="mt-0 space-y-6 focus-visible:outline-none">
+            <div className="editor-pro-glass space-y-5">
               <div>
-                <label htmlFor="topic" className="block text-sm font-medium mb-1.5">
-                  Topic <span className="text-destructive">*</span>
-                </label>
-                <Input
+                <FieldLabel htmlFor="topic" required>
+                  Topic
+                </FieldLabel>
+                <input
                   id="topic"
                   value={topic}
                   onChange={(e) => {
@@ -350,21 +454,20 @@ function EditorPageContent() {
                     if (topicError) setTopicError('');
                   }}
                   placeholder="e.g. 10 tips for remote workers"
+                  className="editor-pro-input"
                 />
-                {topicError && (
-                  <p className="text-destructive text-sm mt-1">{topicError}</p>
-                )}
+                {topicError && <p className="mt-1.5 text-sm text-red-400">{topicError}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5">Tone</label>
+                <FieldLabel>Tone</FieldLabel>
                 <Select value={draftTone} onValueChange={setDraftTone}>
-                  <SelectTrigger>
+                  <SelectTrigger className="editor-pro-select border-0 shadow-none focus:ring-0">
                     <SelectValue placeholder="Select tone" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="border-white/10 bg-[#121a2e] text-slate-200">
                     {DRAFT_TONES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
+                      <SelectItem key={t.value} value={t.value} className="focus:bg-white/10 focus:text-white">
                         {t.label}
                       </SelectItem>
                     ))}
@@ -373,37 +476,29 @@ function EditorPageContent() {
               </div>
 
               <div>
-                <label htmlFor="audience" className="block text-sm font-medium mb-1.5">
-                  Target Audience
-                </label>
-                <Input
+                <FieldLabel htmlFor="audience">Target Audience</FieldLabel>
+                <input
                   id="audience"
                   value={audience}
                   onChange={(e) => setAudience(e.target.value)}
                   placeholder="e.g. freelancers, marketers"
+                  className="editor-pro-input"
                 />
               </div>
 
-              <Button
-                type="button"
+              <PrimaryCta
                 onClick={handleGenerate}
                 disabled={draftLoading}
-                className="w-full sm:w-auto"
+                loading={draftLoading}
+                loadingText="AI is drafting your content..."
               >
-                {draftLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    AI is drafting your content...
-                  </>
-                ) : (
-                  'Generate Content'
-                )}
-              </Button>
+                Generate Content
+              </PrimaryCta>
             </div>
 
             {draftError && (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-destructive text-sm">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div className="editor-pro-error">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 {draftError}
               </div>
             )}
@@ -412,29 +507,25 @@ function EditorPageContent() {
               <div className="space-y-4">
                 <ResultBox content={draftResult} />
                 <div className="flex flex-wrap items-center gap-3">
-                  <Button onClick={handleSaveDocument} disabled={saveLoading}>
-                    {saveLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      'Save as Document'
-                    )}
-                  </Button>
-                  <Button
+                  <PrimaryCta
+                    onClick={handleSaveDocument}
+                    disabled={saveLoading}
+                    loading={saveLoading}
+                    loadingText="Saving..."
+                    icon={FileText}
+                  >
+                    Save as Document
+                  </PrimaryCta>
+                  <button
                     type="button"
-                    variant="ghost"
+                    className="editor-pro-ghost-btn inline-flex items-center gap-2"
                     onClick={() => copyText(draftResult, setDraftCopied)}
                   >
-                    <Copy className="w-4 h-4 mr-2" />
+                    <Copy className="h-4 w-4" />
                     {draftCopied ? 'Copied!' : 'Copy to Clipboard'}
-                  </Button>
+                  </button>
                   {showDocumentsLink && (
-                    <Link
-                      href="/dashboard/documents"
-                      className="text-sm text-brand-500 hover:underline font-medium"
-                    >
+                    <Link href="/dashboard/documents" className="text-sm font-medium text-blue-400 hover:text-blue-300">
                       View in Documents →
                     </Link>
                   )}
@@ -444,12 +535,10 @@ function EditorPageContent() {
           </TabsContent>
 
           {/* Tab 2 — Rewrite */}
-          <TabsContent value="rewrite" className="space-y-6 mt-6">
-            <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
+          <TabsContent value="rewrite" className="mt-0 space-y-6 focus-visible:outline-none">
+            <div className="editor-pro-glass space-y-5">
               <div>
-                <label htmlFor="rewrite-text" className="block text-sm font-medium mb-1.5">
-                  Paste Text
-                </label>
+                <FieldLabel htmlFor="rewrite-text">Paste Text</FieldLabel>
                 <textarea
                   id="rewrite-text"
                   value={rewriteText}
@@ -459,55 +548,44 @@ function EditorPageContent() {
                   }}
                   rows={6}
                   placeholder="Paste your text here to rewrite it..."
-                  className={cn(
-                    'flex min-h-[150px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
-                    'ring-offset-background placeholder:text-muted-foreground',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                    'resize-y'
-                  )}
+                  className="editor-pro-input min-h-[160px] resize-y"
                 />
-                {rewriteTextError && (
-                  <p className="text-destructive text-sm mt-1">{rewriteTextError}</p>
-                )}
+                {rewriteTextError && <p className="mt-1.5 text-sm text-red-400">{rewriteTextError}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Tone</label>
+                <FieldLabel>Tone</FieldLabel>
                 <div className="flex flex-wrap gap-2">
                   {REWRITE_TONES.map((t) => (
-                    <Button
+                    <button
                       key={t.value}
                       type="button"
-                      size="sm"
-                      variant={rewriteTone === t.value ? 'default' : 'outline'}
+                      className={cn(
+                        'editor-pro-tone-pill',
+                        rewriteTone === t.value && 'editor-pro-tone-pill-active'
+                      )}
                       onClick={() => setRewriteTone(t.value)}
                     >
                       {t.label}
-                    </Button>
+                    </button>
                   ))}
                 </div>
               </div>
 
-              <Button
-                type="button"
+              <PrimaryCta
                 onClick={handleRewrite}
                 disabled={rewriteLoading}
-                className="w-full sm:w-auto"
+                loading={rewriteLoading}
+                loadingText="Rewriting..."
+                icon={RefreshCw}
               >
-                {rewriteLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Rewriting...
-                  </>
-                ) : (
-                  'Rewrite'
-                )}
-              </Button>
+                Rewrite
+              </PrimaryCta>
             </div>
 
             {rewriteError && (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-destructive text-sm">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div className="editor-pro-error">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 {rewriteError}
               </div>
             )}
@@ -516,47 +594,59 @@ function EditorPageContent() {
               <div className="space-y-4">
                 <ResultBox content={rewriteResult} />
                 <div className="flex flex-wrap gap-3">
-                  <Button
+                  <button
                     type="button"
-                    variant="secondary"
+                    className="editor-pro-ghost-btn border border-white/10 bg-white/5"
                     onClick={() => setRewriteText(rewriteResult)}
                   >
                     Replace Original
-                  </Button>
-                  <Button
+                  </button>
+                  <button
                     type="button"
-                    variant="ghost"
+                    className="editor-pro-ghost-btn inline-flex items-center gap-2"
                     onClick={() => copyText(rewriteResult, setRewriteCopied)}
                   >
-                    <Copy className="w-4 h-4 mr-2" />
+                    <Copy className="h-4 w-4" />
                     {rewriteCopied ? 'Copied!' : 'Copy to Clipboard'}
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}
           </TabsContent>
 
           {/* Tab 3 — Chat */}
-          <TabsContent value="chat" className="mt-6">
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <h2 className="font-semibold text-sm">Chat Assistant</h2>
+          <TabsContent value="chat" className="mt-0 focus-visible:outline-none">
+            <div className="editor-pro-glass flex min-h-[38rem] flex-col overflow-hidden p-0">
+              <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white">Chat Assistant</h2>
+                  <p className="text-xs text-slate-500">Ask questions, brainstorm ideas, or refine your writing</p>
+                </div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" disabled={conversationHistory.length === 0}>
+                    <button
+                      type="button"
+                      disabled={conversationHistory.length === 0}
+                      className="editor-pro-ghost-btn disabled:opacity-40"
+                    >
                       Clear Chat
-                    </Button>
+                    </button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent>
+                  <AlertDialogContent className="border-white/10 bg-[#121a2e] text-slate-200">
                     <AlertDialogHeader>
                       <AlertDialogTitle>Clear this conversation?</AlertDialogTitle>
-                      <AlertDialogDescription>
+                      <AlertDialogDescription className="text-slate-400">
                         This cannot be undone.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => setConversationHistory([])}>
+                      <AlertDialogCancel className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10">
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => setConversationHistory([])}
+                        className="bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:opacity-90"
+                      >
                         Clear
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -566,11 +656,14 @@ function EditorPageContent() {
 
               <div
                 ref={messageListRef}
-                className="flex flex-col gap-3 min-h-64 max-h-96 overflow-y-auto p-4"
+                className="flex min-h-[30rem] flex-1 flex-col gap-4 overflow-y-auto p-6"
               >
                 {conversationHistory.length === 0 && !chatLoading && (
-                  <div className="flex flex-col items-center justify-center text-center py-8 gap-4">
-                    <p className="text-muted-foreground text-sm max-w-sm">
+                  <div className="flex flex-1 flex-col items-center justify-center gap-5 py-12 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 ring-1 ring-white/10">
+                      <MessageSquare className="h-8 w-8 text-blue-400" />
+                    </div>
+                    <p className="max-w-md text-sm text-slate-400">
                       Hi! I&apos;m your writing assistant. Ask me anything about your content.
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
@@ -579,7 +672,7 @@ function EditorPageContent() {
                           key={s}
                           type="button"
                           onClick={() => setChatInput(s)}
-                          className="text-xs px-3 py-1.5 rounded-full border border-border bg-muted/50 hover:bg-muted transition-colors"
+                          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 transition-all duration-200 hover:border-blue-500/30 hover:bg-blue-500/10 hover:text-white"
                         >
                           {s}
                         </button>
@@ -591,30 +684,26 @@ function EditorPageContent() {
                 {conversationHistory.map((msg, index) => (
                   <div
                     key={`${msg.timestamp.getTime()}-${index}`}
-                    className={cn('flex flex-col max-w-[85%]', msg.role === 'user' ? 'ml-auto items-end' : 'items-start')}
+                    className={cn('flex max-w-[88%] flex-col', msg.role === 'user' ? 'ml-auto items-end' : 'items-start')}
                   >
                     <div
                       className={cn(
-                        'rounded-lg px-4 py-2 text-sm',
-                        msg.role === 'user'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-muted text-foreground'
+                        'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                        msg.role === 'user' ? 'editor-pro-chat-user text-white' : 'editor-pro-chat-ai text-slate-200'
                       )}
                     >
                       {msg.content}
                     </div>
-                    <span className="text-[10px] text-muted-foreground mt-1">
-                      {formatTime(msg.timestamp)}
-                    </span>
+                    <span className="mt-1.5 text-[10px] text-slate-500">{formatTime(msg.timestamp)}</span>
                   </div>
                 ))}
 
                 {chatLoading && (
                   <div className="flex items-start">
-                    <div className="bg-muted rounded-lg px-4 py-3 flex gap-1">
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+                    <div className="editor-pro-chat-ai flex gap-1 rounded-2xl px-4 py-3">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-blue-400 [animation-delay:0ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-purple-400 [animation-delay:150ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-indigo-400 [animation-delay:300ms]" />
                     </div>
                   </div>
                 )}
@@ -622,8 +711,8 @@ function EditorPageContent() {
                 <div ref={chatEndRef} />
               </div>
 
-              <div className="p-4 border-t border-border flex gap-2">
-                <Input
+              <div className="flex gap-3 border-t border-white/10 p-5">
+                <input
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -634,31 +723,34 @@ function EditorPageContent() {
                   }}
                   placeholder="Type your message..."
                   disabled={chatLoading}
-                  className="flex-1"
+                  className="editor-pro-input h-12 flex-1 text-base"
                 />
-                <Button
+                <button
                   type="button"
                   onClick={() => void handleSendChat()}
                   disabled={chatLoading || !chatInput.trim()}
-                  size="icon"
                   aria-label="Send message"
+                  className="editor-pro-cta flex h-12 w-12 shrink-0 items-center justify-center rounded-full p-0"
                 >
-                  <Send className="w-4 h-4" />
-                </Button>
+                  <Send className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </TabsContent>
+          </div>
         </Tabs>
       </div>
-    </div>
+    </EditorLayout>
   );
 }
 
 function EditorPageFallback() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
-    </div>
+    <EditorLayout>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+      </div>
+    </EditorLayout>
   );
 }
 

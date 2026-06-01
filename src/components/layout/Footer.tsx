@@ -3,16 +3,16 @@ import { Zap, Twitter, Github, Linkedin } from 'lucide-react';
 
 const footerLinks = {
   Product: [
-    { label: 'Features', href: '/#features' },
-    { label: 'Pricing', href: '/#pricing' },
+    { label: 'Features', href: '/' },
+    { label: 'Pricing', href: '/' },
     { label: 'Templates', href: '/explore' },
-    { label: 'Changelog', href: '/blog' },
+    { label: 'Blog', href: '/blog' },
   ],
   Company: [
     { label: 'About', href: '/about' },
     { label: 'Blog', href: '/blog' },
     { label: 'Contact', href: '/contact' },
-    { label: 'Careers', href: '/about#careers' },
+    { label: 'Careers', href: '/contact' },
   ],
   Legal: [
     { label: 'Privacy Policy', href: '/privacy' },

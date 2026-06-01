@@ -13,7 +13,15 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const REMOTE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    // Same-origin proxy avoids CORS when dev server port !== backend allowed origin
+    return '/backend-api';
+  }
+  return REMOTE_API_URL.replace(/\/$/, '');
+};
 
 const buildQueryString = (params?: Record<string, JsonValue>) => {
   if (!params) return '';
@@ -38,22 +46,59 @@ const readJsonSafe = async (response: Response) => {
   }
 };
 
+const storeAuthCredentials = (response: JsonValue) => {
+  if (typeof window === 'undefined') return null;
+
+  const payload =
+    response && typeof response === 'object' && 'data' in response
+      ? (response as JsonRecord).data
+      : response;
+  const record =
+    payload && typeof payload === 'object' ? (payload as JsonRecord) : null;
+  const token =
+    (record?.accessToken as string | undefined) ||
+    (record?.token as string | undefined);
+  const user = record?.user;
+
+  if (token) {
+    localStorage.setItem('writeflow_token', String(token));
+  }
+  if (user) {
+    localStorage.setItem('writeflow_user', JSON.stringify(user));
+  }
+
+  return { token, user };
+};
+
 export const apiClient = async (
   path: string,
   options: RequestInit = {},
   serverToken?: string
 ): Promise<JsonValue> => {
-  const baseUrl = API_BASE_URL.replace(/\/$/, '');
+  const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}${path}`;
   const isClient = typeof window !== 'undefined';
-  const token = serverToken ?? (isClient ? localStorage.getItem('writeflow_token') : null);
+  const token =
+    serverToken ??
+    (isClient
+      ? localStorage.getItem('writeflow_token') || localStorage.getItem('accessToken')
+      : null);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const response = await fetch(url, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch {
+    throw new ApiError(
+      'Could not reach the server. Check your connection and try again.',
+      0
+    );
+  }
+
   const data = await readJsonSafe(response);
 
   if (!response.ok) {
@@ -61,7 +106,11 @@ export const apiClient = async (
       (data && typeof data === 'object' && 'message' in data && data.message) ||
       response.statusText ||
       'Request failed';
-    throw new ApiError(String(message), response.status, data ?? undefined);
+    const friendlyMessage =
+      response.status === 401
+        ? 'Your session expired. Please sign out and sign in again.'
+        : String(message);
+    throw new ApiError(friendlyMessage, response.status, data ?? undefined);
   }
 
   return data as JsonValue;
@@ -74,22 +123,7 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     });
 
-    const payload =
-      response && typeof response === 'object' && 'data' in response
-        ? (response as JsonRecord).data
-        : response;
-    const record =
-      payload && typeof payload === 'object' ? (payload as JsonRecord) : null;
-    const token =
-      (record?.accessToken as string | undefined) ||
-      (record?.token as string | undefined);
-    const user = record?.user;
-
-    if (typeof window !== 'undefined' && token && user) {
-      localStorage.setItem('writeflow_token', String(token));
-      localStorage.setItem('writeflow_user', JSON.stringify(user));
-    }
-
+    const { user } = storeAuthCredentials(response) ?? {};
     return user ?? null;
   },
   logout: () => {
@@ -98,13 +132,15 @@ export const authApi = {
       localStorage.removeItem('writeflow_user');
     }
   },
-  
-  // ─── 💡 ফিক্সড রেজিস্ট্রেশন মেথড (অবজেক্ট আকারে ডাটা রিসিভ করবে) ───
-  register: ({ name, email, password }: { name: string; email: string; password: string }) =>
-    apiClient('/api/auth/register', {
+
+  register: async ({ name, email, password }: { name: string; email: string; password: string }) => {
+    const response = await apiClient('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({ name, email, password }),
-    }),
+    });
+    storeAuthCredentials(response);
+    return response;
+  },
 };
 
 export const itemsApi = {
@@ -134,12 +170,16 @@ export const ailogsApi = {
 };
 
 export const usersApi = {
-  getMe: () => apiClient('/api/users/me'),
-  updateMe: (body: Record<string, JsonValue>) =>
-    apiClient('/api/users/me', {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    }),
+  getMe: (token?: string) => apiClient('/api/users/me', {}, token),
+  updateMe: (body: Record<string, JsonValue>, token?: string) =>
+    apiClient(
+      '/api/users/me',
+      {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      },
+      token
+    ),
   getAllUsers: (params: Record<string, JsonValue> = {}) =>
     apiClient(`/api/users${buildQueryString(params)}`),
   toggleStatus: (userId: string) =>
@@ -222,4 +262,6 @@ export const aiApi = {
       method: 'POST',
       body: JSON.stringify({ itemId }),
     }),
+  getHistory: (params: Record<string, JsonValue> = {}) =>
+    apiClient(`/api/ai/history${buildQueryString(params)}`),
 };

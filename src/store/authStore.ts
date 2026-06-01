@@ -32,35 +32,43 @@ interface AuthState {
   setHasHydrated: (hydrated: boolean) => void;
 }
 
-const syncStorage = (accessToken?: string | null, refreshToken?: string | null) => {
+const syncStorage = (accessToken?: string | null, refreshToken?: string | null, clear = false) => {
   if (typeof window === 'undefined') return;
+
+  if (clear) {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    return;
+  }
 
   if (accessToken) {
     localStorage.setItem('accessToken', accessToken);
-  } else {
-    localStorage.removeItem('accessToken');
   }
 
   if (refreshToken) {
     localStorage.setItem('refreshToken', refreshToken);
-  } else {
-    localStorage.removeItem('refreshToken');
   }
 };
 
-const syncApiToken = (token?: string | null, user?: AppUser | null) => {
+const syncApiToken = (
+  token?: string | null,
+  user?: AppUser | null,
+  options?: { clear?: boolean }
+) => {
   if (typeof window === 'undefined') return;
+
+  if (options?.clear) {
+    localStorage.removeItem('writeflow_token');
+    localStorage.removeItem('writeflow_user');
+    return;
+  }
 
   if (token) {
     localStorage.setItem('writeflow_token', token);
-  } else {
-    localStorage.removeItem('writeflow_token');
   }
 
   if (user) {
     localStorage.setItem('writeflow_user', JSON.stringify(user));
-  } else {
-    localStorage.removeItem('writeflow_user');
   }
 };
 
@@ -100,13 +108,14 @@ export const useAuthStore = create<AuthState>()(
         const apiToken = (session?.user as { token?: string })?.token || null;
 
         if (!sessionUser) {
-          syncStorage(null, null);
-          syncApiToken(null, null);
+          syncStorage(null, null, true);
+          syncApiToken(null, null, { clear: true });
           set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false });
           return;
         }
 
         let cachedUser: AppUser | null = null;
+        let cachedToken: string | null = null;
         if (typeof window !== 'undefined') {
           try {
             const raw = localStorage.getItem('writeflow_user');
@@ -114,6 +123,7 @@ export const useAuthStore = create<AuthState>()(
           } catch {
             cachedUser = null;
           }
+          cachedToken = localStorage.getItem('writeflow_token');
         }
 
         const existing = get().user;
@@ -131,11 +141,13 @@ export const useAuthStore = create<AuthState>()(
               }
             : sessionUser;
 
+        const resolvedToken = apiToken || cachedToken || get().accessToken;
+
         syncStorage(session?.accessToken, session?.refreshToken);
-        syncApiToken(apiToken, user);
+        syncApiToken(resolvedToken, user);
         set({
           user,
-          accessToken: session?.accessToken || null,
+          accessToken: resolvedToken || session?.accessToken || null,
           refreshToken: session?.refreshToken || null,
           isAuthenticated: true,
           isLoading: false,
@@ -201,13 +213,15 @@ export const useAuthStore = create<AuthState>()(
 
           const session = await getSession();
           const user = toAppUser(session);
-          const apiToken = (session?.user as { token?: string })?.token || null;
+          const apiToken =
+            (session?.user as { token?: string })?.token ||
+            (typeof window !== 'undefined' ? localStorage.getItem('writeflow_token') : null);
 
           syncStorage(session?.accessToken, session?.refreshToken);
           syncApiToken(apiToken, user);
           set({
             user,
-            accessToken: session?.accessToken || null,
+            accessToken: apiToken || session?.accessToken || null,
             refreshToken: session?.refreshToken || null,
             isAuthenticated: !!user,
             isLoading: false,
@@ -221,8 +235,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        syncStorage(null, null);
-        syncApiToken(null, null);
+        syncStorage(null, null, true);
+        syncApiToken(null, null, { clear: true });
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false });
         void signOut({ callbackUrl: '/login' });
       },

@@ -35,11 +35,12 @@ export default function UsageHistoryPage() {
     try {
       const params: Record<string, string | number> = { page, limit: 15 };
       if (agentFilter !== 'All Agents') params.agentUsed = agentFilter;
-      const { data } = await aiApi.getHistory(params);
-      setLogs(data.data);
-      setMeta(data.meta);
+      const res: any = await aiApi.getHistory(params);
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setLogs(list);
+      setMeta(res?.meta ?? { total: list.length, totalPages: 1, page: 1 });
       if (page === 1) {
-        const total = (data.data as AILog[]).reduce((sum: number, l: AILog) => sum + l.tokensUsed, 0);
+        const total = (list as AILog[]).reduce((sum: number, l: AILog) => sum + l.tokensUsed, 0);
         setTotalTokens(total);
       }
     } catch {
