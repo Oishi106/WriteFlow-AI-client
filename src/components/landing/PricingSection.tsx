@@ -37,7 +37,7 @@ const plans = [
       { text: 'Advanced analytics', included: false },
     ],
     cta: 'Start Pro Trial',
-    href: '/register?plan=pro',
+    href: '/checkout?plan=pro',
     highlighted: true,
   },
   {
@@ -55,7 +55,7 @@ const plans = [
       { text: 'Advanced analytics', included: true },
     ],
     cta: 'Start Team Trial',
-    href: '/register?plan=team',
+    href: '/checkout?plan=team',
     highlighted: false,
   },
 ];

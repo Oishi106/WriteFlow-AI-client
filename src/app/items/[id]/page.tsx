@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { Star } from 'lucide-react';
 import { itemsApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
+import TemplateActions from '@/components/templates/TemplateActions';
 
 const TEMPLATE_CATEGORIES = ['blog', 'social', 'email', 'ad-copy'];
 const BOOKING_CATEGORIES = ['travel', 'restaurant', 'product', 'event', 'property'];
@@ -21,6 +22,7 @@ const categoryColors: Record<string, string> = {
 };
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
+const USD_BDT_RATE = Number(process.env.NEXT_PUBLIC_USD_BDT_RATE || 0);
 
 type Item = {
   _id: string;
@@ -80,6 +82,24 @@ async function fetchReviews(id: string): Promise<Review[]> {
   }
 }
 
+async function resolveImageUrl(imageUrl?: string): Promise<string | null> {
+  if (!imageUrl) return null;
+  try {
+    const url = new URL(imageUrl);
+    if (url.hostname === 'ibb.co' || url.hostname === 'ibb.co.com') {
+      const response = await fetch(imageUrl, { next: { revalidate: 3600 } });
+      if (!response.ok) return null;
+      const html = await response.text();
+      const ogMatch = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+      const twitterMatch = html.match(/name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
+      return ogMatch?.[1] || twitterMatch?.[1] || null;
+    }
+    return imageUrl;
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: { params: { id: string } }) {
   const item = await fetchItem(params.id);
   if (!item) {
@@ -102,7 +122,16 @@ export default async function TemplateDetailsPage({ params }: { params: { id: st
     fetchRelated(item.category, item._id),
   ]);
 
+  const resolvedImage = await resolveImageUrl(item.image);
+  const relatedWithImages = await Promise.all(
+    related.map(async (relatedItem) => ({
+      ...relatedItem,
+      image: (await resolveImageUrl(relatedItem.image)) || relatedItem.image,
+    }))
+  );
+
   const filledStars = Math.round(item.rating || 0);
+  const bdtPrice = item.price && USD_BDT_RATE > 0 ? Math.round(item.price * USD_BDT_RATE) : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -118,7 +147,7 @@ export default async function TemplateDetailsPage({ params }: { params: { id: st
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-border bg-muted">
             <Image
-              src={item.image || '/placeholder.jpg'}
+              src={resolvedImage || item.image || '/placeholder.jpg'}
               alt={item.title}
               fill
               className="object-cover"
@@ -147,17 +176,16 @@ export default async function TemplateDetailsPage({ params }: { params: { id: st
             </div>
 
             <div className="text-lg font-semibold">
-              {item.price && item.price > 0 ? `$${item.price}` : 'Free'}
+              {item.price && item.price > 0
+                ? bdtPrice
+                  ? `${bdtPrice.toLocaleString('en-US')} BDT`
+                  : `$${item.price}`
+                : 'Free'}
             </div>
 
             <div className="flex flex-wrap gap-3">
               {TEMPLATE_CATEGORIES.includes(item.category) && (
-                <Link
-                  href={`/editor?itemId=${item._id}`}
-                  className="px-6 py-3 bg-brand-500 text-white rounded-xl font-semibold text-sm hover:bg-brand-600 transition-colors"
-                >
-                  Use This Template
-                </Link>
+                <TemplateActions itemId={item._id} />
               )}
               {BOOKING_CATEGORIES.includes(item.category) && (
                 <Link
@@ -207,11 +235,11 @@ export default async function TemplateDetailsPage({ params }: { params: { id: st
           )}
         </section>
 
-        {related.length > 0 && (
+        {relatedWithImages.length > 0 && (
           <section className="space-y-4">
             <h2 className="font-semibold text-lg">Related Templates</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {related.map((relatedItem) => (
+              {relatedWithImages.map((relatedItem) => (
                 <Link
                   key={relatedItem._id}
                   href={`/items/${relatedItem._id}`}

@@ -247,6 +247,14 @@ export const newsletterApi = {
     apiClient('/api/newsletter', { method: 'POST', body: JSON.stringify({ email }) }),
 };
 
+export const usageApi = {
+  trackTemplateUsage: (itemId: string) =>
+    apiClient('/api/users/usage/template', {
+      method: 'POST',
+      body: JSON.stringify({ itemId }),
+    }),
+};
+
 export const aiApi = {
   generateContent: (body: Record<string, JsonValue>) =>
     apiClient('/api/ai/generate-description', {
