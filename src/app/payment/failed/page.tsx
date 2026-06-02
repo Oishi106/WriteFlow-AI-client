@@ -1,10 +1,11 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AlertTriangle } from 'lucide-react';
 
-export default function PaymentFailedPage() {
+function PaymentFailedContent() {
   const searchParams = useSearchParams();
   const status = searchParams.get('status') || 'failed';
   const message = searchParams.get('message') || '';
@@ -34,20 +35,22 @@ export default function PaymentFailedPage() {
         </div>
 
         <div className="mt-8 flex flex-col gap-3">
-          <Link
-            href="/checkout"
-            className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold"
-          >
+          <Link href="/checkout" className="w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold">
             Try again
           </Link>
-          <Link
-            href="/"
-            className="w-full py-3 rounded-xl border border-border text-foreground font-semibold"
-          >
+          <Link href="/" className="w-full py-3 rounded-xl border border-border text-foreground font-semibold">
             Back to home
           </Link>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PaymentFailedPage() {
+  return (
+    <Suspense>
+      <PaymentFailedContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, ShieldCheck } from 'lucide-react';
@@ -8,34 +8,17 @@ import { useToast } from '@/hooks/use-toast';
 import { itemsApi } from '@/lib/api';
 
 const plans = [
-  {
-    key: 'pro',
-    name: 'Pro',
-    price: 1900,
-    period: 'per month',
-    summary: 'For solo creators and freelancers.',
-  },
-  {
-    key: 'team',
-    name: 'Team',
-    price: 4900,
-    period: 'per month',
-    summary: 'For content teams at scale.',
-  },
+  { key: 'pro', name: 'Pro', price: 1900, period: 'per month', summary: 'For solo creators and freelancers.' },
+  { key: 'team', name: 'Team', price: 4900, period: 'per month', summary: 'For content teams at scale.' },
 ];
 
 const formatPrice = (amount: number) => `${amount.toLocaleString('en-US')} BDT`;
 const USD_BDT_RATE = Number(process.env.NEXT_PUBLIC_USD_BDT_RATE || 0);
 
-type ItemSummary = {
-  _id: string;
-  title: string;
-  price?: number;
-};
-
+type ItemSummary = { _id: string; title: string; price?: number };
 const parsePayload = (res: any) => res?.data ?? res;
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const searchParams = useSearchParams();
   const planFromQuery = searchParams.get('plan')?.toLowerCase() || '';
   const itemId = searchParams.get('itemId') || '';
@@ -57,28 +40,21 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!itemId) return;
     setItemLoading(true);
-    itemsApi
-      .getItemById(itemId)
+    itemsApi.getItemById(itemId)
       .then((res) => {
         const payload = parsePayload(res);
         const data = (payload?.data ?? payload) as ItemSummary;
         if (data?._id) setItem(data);
       })
-      .catch(() => {
-        setItem(null);
-      })
-      .finally(() => {
-        setItemLoading(false);
-      });
+      .catch(() => setItem(null))
+      .finally(() => setItemLoading(false));
   }, [itemId]);
 
   const handleCheckout = async () => {
     try {
       setIsLoading(true);
-      if (itemId) {
-        if (!itemPriceBDT) {
-          throw new Error('Item price is unavailable. Please try again later.');
-        }
+      if (itemId && !itemPriceBDT) {
+        throw new Error('Item price is unavailable. Please try again later.');
       }
       const response = await fetch('/api/bkash/create', {
         method: 'POST',
@@ -91,11 +67,9 @@ export default function CheckoutPage() {
       });
 
       const payload = (await response.json()) as { bkashURL?: string; message?: string };
-
       if (!response.ok || !payload.bkashURL) {
         throw new Error(payload.message || 'Unable to start payment.');
       }
-
       window.location.href = payload.bkashURL;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Payment failed to start.';
@@ -111,8 +85,7 @@ export default function CheckoutPage() {
           <p className="text-brand-500 text-xs font-semibold uppercase tracking-[0.3em]">Checkout</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold mt-3">Pay with bKash</h1>
           <p className="text-muted-foreground mt-4 max-w-2xl">
-            You will be redirected to the bKash secure checkout. After payment, we will confirm the
-            transaction and unlock your plan.
+            You will be redirected to the bKash secure checkout. After payment, we will confirm the transaction and unlock your plan.
           </p>
         </div>
 
@@ -129,9 +102,7 @@ export default function CheckoutPage() {
                     <p className="text-muted-foreground text-sm mt-1">One-time purchase</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold">
-                      {itemPriceBDT ? formatPrice(itemPriceBDT) : '—'}
-                    </p>
+                    <p className="text-2xl font-bold">{itemPriceBDT ? formatPrice(itemPriceBDT) : '—'}</p>
                     <p className="text-muted-foreground text-xs">total</p>
                   </div>
                 </div>
@@ -196,9 +167,7 @@ export default function CheckoutPage() {
               className="mt-6 w-full py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Redirecting...
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting...</>
               ) : (
                 'Pay with bKash'
               )}
@@ -206,13 +175,19 @@ export default function CheckoutPage() {
 
             <p className="text-xs text-muted-foreground mt-4">
               Not ready?{' '}
-              <Link href="/" className="text-brand-500 hover:underline">
-                Go back
-              </Link>
+              <Link href="/" className="text-brand-500 hover:underline">Go back</Link>
             </p>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense>
+      <CheckoutContent />
+    </Suspense>
   );
 }
