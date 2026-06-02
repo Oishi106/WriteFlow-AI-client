@@ -124,7 +124,7 @@ export default function Navbar() {
                       </Link>
                     )}
                     <div className="border-t border-border mt-1">
-                      <button onClick={() => { logout(); setProfileOpen(false); }} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors w-full text-destructive">
+                      <button onClick={() => { void logout(); setProfileOpen(false); }} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors w-full text-destructive">
                         <LogOut className="w-4 h-4" /> Logout
                       </button>
                     </div>
@@ -200,7 +200,7 @@ export default function Navbar() {
               </div>
             )}
             {isAuthenticated && (
-              <button onClick={() => { logout(); setMenuOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-destructive hover:bg-muted transition-colors">
+              <button onClick={() => { void logout(); setMenuOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-destructive hover:bg-muted transition-colors">
                 Logout
               </button>
             )}

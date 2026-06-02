@@ -30,7 +30,7 @@ export default function SettingsPage() {
     await new Promise(r => setTimeout(r, 1000));
     setDeleting(false);
     toast({ title: 'Account deletion requested. You will be logged out.', variant: 'destructive' });
-    setTimeout(logout, 2000);
+    setTimeout(() => void logout(), 2000);
   };
 
   return (
@@ -107,7 +107,7 @@ export default function SettingsPage() {
         <h2 className="font-semibold text-red-500 mb-1">Danger Zone</h2>
         <p className="text-muted-foreground text-sm mb-4">These actions are irreversible. Please be careful.</p>
         <div className="flex flex-col sm:flex-row gap-3">
-          <button onClick={logout} className="px-5 py-2.5 border border-border rounded-xl text-sm font-medium hover:bg-muted transition-colors">
+          <button onClick={() => void logout()} className="px-5 py-2.5 border border-border rounded-xl text-sm font-medium hover:bg-muted transition-colors">
             Sign out of all devices
           </button>
           <button

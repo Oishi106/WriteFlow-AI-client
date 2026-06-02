@@ -1,9 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
-import AuthProvider from '@/components/layout/AuthProvider';
+import AppProviders from '@/components/layout/AppProviders';
 import HomePageLoader from '@/components/layout/HomePageLoader';
-import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { Toaster } from '@/components/ui/toaster';
 import '@/styles/globals.css';
 
@@ -47,17 +46,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}>
-        <AuthProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <HomePageLoader>{children}</HomePageLoader>
-            <Toaster />
-          </ThemeProvider>
-        </AuthProvider>
+        <AppProviders>
+          <HomePageLoader>{children}</HomePageLoader>
+          <Toaster />
+        </AppProviders>
       </body>
     </html>
   );

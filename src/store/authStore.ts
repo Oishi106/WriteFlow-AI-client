@@ -22,10 +22,11 @@ interface AuthState {
   refreshToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isLoggingOut: boolean;
   hasHydrated: boolean;
   login: (email: string, password: string) => Promise<AppUser | null>;
   register: (name: string, email: string, password: string) => Promise<AppUser | null>;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateUser: (user: Partial<AppUser>) => void;
   syncSession: (session: Session | null) => void;
   setLoading: (loading: boolean) => void;
@@ -81,15 +82,15 @@ const toAppUser = (session: Session | null): AppUser | null => {
 
   return {
     _id: sessionUser.id || sessionUser._id || sessionUser.email || '',
-    name: user.name || user.email.split('@')[0],
-    email: user.email,
+    name: user.name || user.email?.split('@')[0] || 'User',
+    email: user.email || '',
     role: user.role || 'USER',
-    plan: user.plan || 'FREE',
-    status: user.status || 'ACTIVE',
-    avatar: user.avatar,
+    plan: (user.plan as AppUser['plan']) || 'FREE',
+    status: 'ACTIVE' as const,
+    avatar: user.avatar || user.image || undefined,
     bio: user.bio,
-    createdAt: user.createdAt || new Date().toISOString(),
-    updatedAt: user.updatedAt || new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 };
 
@@ -101,11 +102,12 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isLoading: false,
       isAuthenticated: false,
+      isLoggingOut: false,
       hasHydrated: false,
 
       syncSession: (session: Session | null) => {
         const sessionUser = toAppUser(session);
-        const apiToken = (session?.user as { token?: string })?.token || null;
+        const apiToken = session?.user?.token || null;
 
         if (!sessionUser) {
           syncStorage(null, null, true);
@@ -143,12 +145,12 @@ export const useAuthStore = create<AuthState>()(
 
         const resolvedToken = apiToken || cachedToken || get().accessToken;
 
-        syncStorage(session?.accessToken, session?.refreshToken);
+        syncStorage(resolvedToken, null);
         syncApiToken(resolvedToken, user);
         set({
           user,
-          accessToken: resolvedToken || session?.accessToken || null,
-          refreshToken: session?.refreshToken || null,
+          accessToken: resolvedToken,
+          refreshToken: null,
           isAuthenticated: true,
           isLoading: false,
         });
@@ -176,15 +178,15 @@ export const useAuthStore = create<AuthState>()(
           const session = await getSession();
           const user = toAppUser(session);
           const apiToken =
-            (session?.user as { token?: string })?.token ||
+            session?.user?.token ||
             (typeof window !== 'undefined' ? localStorage.getItem('writeflow_token') : null);
 
-          syncStorage(session?.accessToken, session?.refreshToken);
+          syncStorage(apiToken, null);
           syncApiToken(apiToken, user);
           set({
             user,
-            accessToken: session?.accessToken || null,
-            refreshToken: session?.refreshToken || null,
+            accessToken: apiToken,
+            refreshToken: null,
             isAuthenticated: !!user,
             isLoading: false,
           });
@@ -214,15 +216,15 @@ export const useAuthStore = create<AuthState>()(
           const session = await getSession();
           const user = toAppUser(session);
           const apiToken =
-            (session?.user as { token?: string })?.token ||
+            session?.user?.token ||
             (typeof window !== 'undefined' ? localStorage.getItem('writeflow_token') : null);
 
-          syncStorage(session?.accessToken, session?.refreshToken);
+          syncStorage(apiToken, null);
           syncApiToken(apiToken, user);
           set({
             user,
-            accessToken: apiToken || session?.accessToken || null,
-            refreshToken: session?.refreshToken || null,
+            accessToken: apiToken,
+            refreshToken: null,
             isAuthenticated: !!user,
             isLoading: false,
           });
@@ -234,11 +236,16 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
+      logout: async () => {
+        set({ isLoggingOut: true });
         syncStorage(null, null, true);
         syncApiToken(null, null, { clear: true });
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false });
-        void signOut({ callbackUrl: '/login' });
+        try {
+          await signOut({ redirect: false });
+        } finally {
+          set({ isLoggingOut: false });
+        }
       },
 
       updateUser: (updatedUser: Partial<AppUser>) => {

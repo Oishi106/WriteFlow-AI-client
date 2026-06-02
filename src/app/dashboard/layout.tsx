@@ -124,7 +124,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           collapsed={collapsed && !mobile}
           pathname={pathname}
         />
-        <button type="button" onClick={logout} className={cn('wf-pro-nav-logout', collapsed && !mobile && 'justify-center px-2')}>
+        <button type="button" onClick={() => void logout()} className={cn('wf-pro-nav-logout', collapsed && !mobile && 'justify-center px-2')}>
           <LogOut className="h-5 w-5 shrink-0" />
           {(!collapsed || mobile) && 'Logout'}
         </button>

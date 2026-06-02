@@ -1,6 +1,7 @@
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import type { NextAuthOptions } from 'next-auth';
+import { authenticateGoogleUserWithBackend } from '@/lib/google-oauth-backend';
 
 type BackendUser = {
   _id?: string;
@@ -9,6 +10,7 @@ type BackendUser = {
   email?: string;
   role?: 'USER' | 'ADMIN';
   plan?: string;
+  avatar?: string;
 };
 
 type CredentialsUser = {
@@ -17,12 +19,19 @@ type CredentialsUser = {
   email?: string;
   role?: 'USER' | 'ADMIN';
   token?: string;
+  image?: string | null;
+  plan?: string;
 };
 
 const API_BASE_URL =
   process.env.API_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   'http://localhost:5000';
+
+const googleClientId =
+  process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID || '';
+const googleClientSecret =
+  process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET || '';
 
 const extractAuthPayload = (payload: Record<string, unknown> | null) => {
   const data = (payload?.data ?? payload) as Record<string, unknown> | undefined;
@@ -43,7 +52,7 @@ const safeJson = async (response: Response) => {
   const text = await response.text();
   if (!text) return null;
   try {
-    return JSON.parse(text) as any;
+    return JSON.parse(text) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -58,8 +67,15 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
+      authorization: {
+        params: {
+          prompt: 'consent',
+          access_type: 'offline',
+          response_type: 'code',
+        },
+      },
     }),
     CredentialsProvider({
       name: 'Credentials',
@@ -85,13 +101,13 @@ export const authOptions: NextAuthOptions = {
 
         if (!response.ok) {
           const message = payload?.message || 'Invalid email or password';
-          throw new Error(message);
+          throw new Error(String(message));
         }
 
         const { token: tokenValue, user: userValue } = extractAuthPayload(payload);
 
         if (!userValue || !tokenValue) {
-          throw new Error(payload?.message || 'Invalid login response from server');
+          throw new Error(String(payload?.message || 'Invalid login response from server'));
         }
 
         const user = userValue as BackendUser;
@@ -102,7 +118,7 @@ export const authOptions: NextAuthOptions = {
           role: user.role || 'USER',
           plan: user.plan,
           token: tokenValue,
-        } as CredentialsUser & { plan?: string };
+        } as CredentialsUser;
       },
     }),
   ],
@@ -110,30 +126,37 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider !== 'google') return true;
 
-      try {
-        const response = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/api/auth/google-upsert`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: user.name,
-            email: user.email,
-            googleId: account.providerAccountId,
-          }),
-        });
-
-        const payload = await safeJson(response);
-        const data = payload?.data;
-
-        if (response.ok && data?.token) {
-          (user as CredentialsUser).token = data.token;
-          (user as CredentialsUser).role = data.user?.role || 'USER';
-          (user as CredentialsUser).id = data.user?._id || data.user?.id || user.id;
-        } else {
-          (user as CredentialsUser).role = (user as CredentialsUser).role || 'USER';
-        }
-      } catch {
-        (user as CredentialsUser).role = (user as CredentialsUser).role || 'USER';
+      const email = user.email?.trim();
+      if (!email) {
+        return '/login?error=GoogleSignInFailed';
       }
+
+      const result = await authenticateGoogleUserWithBackend({
+        name: user.name || email.split('@')[0],
+        email,
+        googleId: account.providerAccountId,
+        avatar: user.image,
+      });
+
+      if (!result.ok) {
+        switch (result.reason) {
+          case 'admin_email':
+            return '/login?error=AdminUseEmailPassword';
+          case 'email_exists_manual':
+            return '/login?error=EmailRegisteredUsePassword';
+          default:
+            return '/login?error=GoogleSignInFailed';
+        }
+      }
+
+      const sessionUser = user as CredentialsUser;
+      sessionUser.token = result.token;
+      sessionUser.role = (result.user.role as 'USER' | 'ADMIN') || 'USER';
+      sessionUser.id = String(result.user._id || result.user.id || user.id || email);
+      sessionUser.name = result.user.name || user.name || undefined;
+      sessionUser.email = result.user.email || email;
+      sessionUser.plan = result.user.plan;
+      sessionUser.image = result.user.avatar || user.image;
 
       return true;
     },
@@ -144,8 +167,9 @@ export const authOptions: NextAuthOptions = {
         token.role = sessionUser.role;
         token.token = sessionUser.token;
         if (sessionUser.name) token.name = sessionUser.name;
-        const withPlan = sessionUser as CredentialsUser & { plan?: string };
-        if (withPlan.plan) token.plan = withPlan.plan;
+        if (sessionUser.plan) token.plan = sessionUser.plan;
+        const avatar = sessionUser.image || (user as { image?: string }).image;
+        if (avatar) token.avatar = avatar;
       }
 
       if (trigger === 'update' && session) {
@@ -164,13 +188,14 @@ export const authOptions: NextAuthOptions = {
         session.user.token = token.token as string;
         if (token.name) session.user.name = token.name as string;
         if (token.bio !== undefined) {
-          (session.user as { bio?: string }).bio = token.bio as string;
+          session.user.bio = token.bio as string;
         }
         if (token.avatar !== undefined) {
-          (session.user as { avatar?: string }).avatar = token.avatar as string;
+          session.user.avatar = token.avatar as string;
+          session.user.image = token.avatar as string;
         }
         if (token.plan) {
-          (session.user as { plan?: string }).plan = token.plan as string;
+          session.user.plan = token.plan as string;
         }
       }
 
@@ -179,3 +204,9 @@ export const authOptions: NextAuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
+
+/** NextAuth Google callback — must match Google Cloud Console Authorized redirect URIs exactly. */
+export function getGoogleOAuthRedirectUri(): string {
+  const base = (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '');
+  return `${base}/api/auth/callback/google`;
+}

@@ -56,15 +56,37 @@ export default function TemplateDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+
+    const parsePayload = <T,>(res: unknown): T | null => {
+      if (!res || typeof res !== 'object') return null;
+      const payload = res as Record<string, unknown>;
+      const data = payload.data ?? payload;
+      if (data && typeof data === 'object' && 'data' in (data as Record<string, unknown>)) {
+        return (data as { data: T }).data;
+      }
+      return data as T;
+    };
+
+    const parseItemList = (res: unknown): Template[] => {
+      const parsed = parsePayload<Template[]>(res);
+      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(res)) return res as Template[];
+      return [];
+    };
+
     Promise.all([
-      itemsApi.getById(id as string),
-      itemsApi.getRelated(id as string),
+      itemsApi.getItemById(id as string),
+      itemsApi.getItems({ limit: 6 }),
       reviewsApi.getByItem(id as string, { limit: 5 }),
-    ]).then(([tRes, rRes, revRes]) => {
-      setTemplate(tRes.data.data);
-      setRelated(rRes.data.data);
-      setReviews(revRes.data.data);
-    }).catch(() => {}).finally(() => setLoading(false));
+    ])
+      .then(([tRes, itemsRes, revRes]) => {
+        setTemplate(parsePayload<Template>(tRes));
+        setRelated(parseItemList(itemsRes).filter((t) => t._id !== id).slice(0, 4));
+        const reviewList = parsePayload<Review[]>(revRes);
+        setReviews(Array.isArray(reviewList) ? reviewList : []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [id]);
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
