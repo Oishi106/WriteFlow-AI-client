@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,9 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
       <SiteShell className="flex h-16 items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-3 font-semibold tracking-tight">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-glow">
-            WF
+        <Link href="/" className="flex items-center gap-3 font-semibold tracking-tight" aria-label="Go to homepage">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 overflow-hidden">
+            <Image src="/logo.png" alt="WriteFlow AI logo" width={36} height={36} className="h-9 w-9 object-contain" />
           </span>
           <span className="flex flex-col leading-none">
             <span>WriteFlow AI</span>

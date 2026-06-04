@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
-import { Zap, Loader2, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, CheckCircle, ArrowLeft } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -25,9 +26,9 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-background">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
+          <Link href="/" className="inline-flex items-center gap-2 mb-6" aria-label="Go to homepage">
+            <div className="w-9 h-9 bg-brand-500/10 rounded-xl flex items-center justify-center overflow-hidden">
+              <Image src="/logo.png" alt="WriteFlow AI logo" width={36} height={36} className="h-9 w-9 object-contain" priority />
             </div>
             <span className="font-display font-bold text-xl gradient-text">WriteFlow AI</span>
           </Link>

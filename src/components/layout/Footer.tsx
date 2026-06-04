@@ -1,5 +1,6 @@
+import Image from 'next/image';
 import Link from 'next/link';
-import { Zap, Twitter, Github, Linkedin } from 'lucide-react';
+import { Twitter, Github, Linkedin } from 'lucide-react';
 
 const footerLinks = {
   Product: [
@@ -28,9 +29,9 @@ export default function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <Link href="/" className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
-                <Zap className="w-4 h-4 text-white" />
+            <Link href="/" className="flex items-center gap-2 mb-4" aria-label="Go to homepage">
+              <div className="w-8 h-8 rounded-lg overflow-hidden bg-brand-500/10">
+                <Image src="/logo.png" alt="WriteFlow AI logo" width={32} height={32} className="h-8 w-8 object-contain" />
               </div>
               <span className="font-display font-bold text-lg gradient-text">WriteFlow AI</span>
             </Link>

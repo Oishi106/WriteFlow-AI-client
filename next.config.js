@@ -2,6 +2,7 @@
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 const nextConfig = {
+  reactStrictMode: true,
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
@@ -9,8 +10,9 @@ const nextConfig = {
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
       { protocol: 'https', hostname: 'ui-avatars.com' },
       { protocol: 'https', hostname: 'res.cloudinary.com' },
-      { protocol: 'https', hostname: 'ibb.co.com' },
+      { protocol: 'https', hostname: 'ibb.co' },
       { protocol: 'https', hostname: 'i.ibb.co' },
+      { protocol: 'https', hostname: 'ibb.co.com' },
     ],
   },
   async rewrites() {

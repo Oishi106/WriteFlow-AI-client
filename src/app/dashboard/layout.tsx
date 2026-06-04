@@ -1,11 +1,12 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, FileText, User, Sparkles, Settings,
-  LogOut, ChevronLeft, ChevronRight, Zap, Menu, Plus,
+  LogOut, ChevronLeft, ChevronRight, Menu, Plus,
   BarChart2, Users, BookTemplate, Star, SlidersHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -81,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       >
         <div className="wf-pro-logo-icon">
-          <Zap className="h-4 w-4 text-white" />
+          <Image src="/logo.png" alt="WriteFlow AI logo" width={24} height={24} className="h-6 w-6 object-contain" priority />
         </div>
         {(!collapsed || mobile) && <span className="wf-pro-logo-text">WriteFlow AI</span>}
       </Link>

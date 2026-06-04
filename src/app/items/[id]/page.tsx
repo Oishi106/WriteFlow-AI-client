@@ -82,21 +82,40 @@ async function fetchReviews(id: string): Promise<Review[]> {
   }
 }
 
+// ✅ FIXED: i.ibb.co/i.ibb.co.com direct URL return, ibb.co/ibb.co.com viewer page theke og:image scrape with User-Agent
 async function resolveImageUrl(imageUrl?: string): Promise<string | null> {
   if (!imageUrl) return null;
   try {
     const url = new URL(imageUrl);
-    if (url.hostname === 'ibb.co' || url.hostname === 'ibb.co.com') {
-      const response = await fetch(imageUrl, { next: { revalidate: 3600 } });
-      if (!response.ok) return null;
-      const html = await response.text();
-      const ogMatch = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
-      const twitterMatch = html.match(/name=["']twitter:image["']\s+content=["']([^"']+)["']/i);
-      return ogMatch?.[1] || twitterMatch?.[1] || null;
+
+    // i.ibb.co or i.ibb.co.com = direct image URL, scraping dorkar nei
+    if (url.hostname === 'i.ibb.co' || url.hostname === 'i.ibb.co.com') {
+      return imageUrl;
     }
+
+    // ibb.co or ibb.co.com = viewer page, og:image scrape korbo
+    if (url.hostname === 'ibb.co' || url.hostname === 'ibb.co.com') {
+      try {
+        const response = await fetch(imageUrl, {
+          next: { revalidate: 3600 },
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          },
+        });
+        if (!response.ok) return imageUrl;
+        const html = await response.text();
+        // i.ibb.co or i.ibb.co.com direct link khuja
+        const match = html.match(/content=["'](https:\/\/(?:i\.)?ibb\.co(?:\.com)?[^"']+)["']/i);
+        return match?.[1] || imageUrl;
+      } catch {
+        return imageUrl;
+      }
+    }
+
     return imageUrl;
   } catch {
-    return null;
+    return imageUrl || null;
   }
 }
 
@@ -126,7 +145,7 @@ export default async function TemplateDetailsPage({ params }: { params: { id: st
   const relatedWithImages = await Promise.all(
     related.map(async (relatedItem) => ({
       ...relatedItem,
-      image: (await resolveImageUrl(relatedItem.image)) || relatedItem.image,
+      image: (await resolveImageUrl(relatedItem.image)) || relatedItem.image || '/placeholder.jpg',
     }))
   );
 
@@ -146,13 +165,23 @@ export default async function TemplateDetailsPage({ params }: { params: { id: st
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-border bg-muted">
-            <Image
-              src={resolvedImage || item.image || '/placeholder.jpg'}
-              alt={item.title}
-              fill
-              className="object-cover"
-              sizes="(max-width: 1024px) 100vw, 50vw"
-            />
+            {resolvedImage ? (
+              <Image
+                src={resolvedImage}
+                alt={item.title}
+                fill
+                className="object-cover"
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                priority
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={item.image || '/placeholder.jpg'}
+                alt={item.title}
+                className="w-full h-full object-cover"
+              />
+            )}
           </div>
 
           <div className="space-y-4">

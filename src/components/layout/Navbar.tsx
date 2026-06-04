@@ -1,9 +1,10 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { Menu, X, Zap, Sun, Moon, ChevronDown, User, Settings, LogOut, LayoutDashboard, FileText } from 'lucide-react';
+import { Menu, X, Sun, Moon, ChevronDown, User, Settings, LogOut, LayoutDashboard, FileText } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -53,9 +54,9 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center group-hover:bg-brand-600 transition-colors">
-              <Zap className="w-4 h-4 text-white" />
+          <Link href="/" className="flex items-center gap-2 group" aria-label="Go to homepage">
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-brand-500/10">
+              <Image src="/logo.png" alt="WriteFlow AI logo" width={32} height={32} className="h-8 w-8 object-contain" priority />
             </div>
             <span className="font-display font-bold text-lg gradient-text">WriteFlow AI</span>
           </Link>

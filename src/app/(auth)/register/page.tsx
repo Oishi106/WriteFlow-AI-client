@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSession, signIn } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Zap, Loader2, Check } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Check } from 'lucide-react';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
@@ -94,9 +95,9 @@ export default function RegisterPage() {
         <div className="hidden lg:flex flex-col justify-center px-20 relative">
           <div className="absolute inset-0 -z-10 rounded-none animated-gradient opacity-70" />
           <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent via-transparent to-background/40" />
-          <Link href="/" className="flex items-center gap-3 mb-10">
-            <div className="w-12 h-12 rounded-2xl bg-brand-500 flex items-center justify-center">
-              <Zap className="w-6 h-6 text-white" />
+          <Link href="/" className="flex items-center gap-3 mb-10" aria-label="Go to homepage">
+            <div className="w-12 h-12 rounded-2xl bg-brand-500/10 flex items-center justify-center overflow-hidden">
+              <Image src="/logo.png" alt="WriteFlow AI logo" width={48} height={48} className="h-12 w-12 object-contain" priority />
             </div>
             <span className="font-display text-3xl font-bold text-white">WriteFlow AI</span>
           </Link>
