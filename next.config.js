@@ -17,12 +17,12 @@ const nextConfig = {
   },
   async rewrites() {
     return [
-      {
-        source: '/backend-api/:path*',
+      {                         
+        source: '/backend-api/:path*',               
         destination: `${apiUrl.replace(/\/$/, '')}/:path*`,
       },
     ];
-  },
+  },             
 };
 
 module.exports = nextConfig;                                        
