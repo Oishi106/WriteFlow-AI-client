@@ -1,9 +1,9 @@
-import { withAuth } from 'next-auth/middleware';
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { withAuth } from 'next-auth/middleware';            
+import { NextResponse } from 'next/server';                   
+import type { NextRequest } from 'next/server';                              
 
-export default withAuth(
-  function middleware(req: NextRequest) {
+export default withAuth(                          
+  function middleware(req: NextRequest) {                           
     const token = (req as any).nextauth?.token as { role?: string } | undefined;
 
     if (req.nextUrl.pathname.startsWith('/admin') && token?.role !== 'ADMIN') {                               
