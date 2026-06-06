@@ -7,7 +7,7 @@ type AppUser = {
   name: string;
   email: string;
   role?: 'USER' | 'ADMIN';
-  plan?: 'FREE' | 'PRO' | 'TEAM';
+  plan?: 'FREE' | 'PRO' | 'TEAM';                                          
   status?: 'ACTIVE' | 'BANNED';
   avatar?: string;                                                
   bio?: string;
