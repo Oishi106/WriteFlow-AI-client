@@ -10,9 +10,9 @@ export default withAuth(
       return NextResponse.redirect(new URL('/dashboard', req.nextUrl.origin));
     }
 
-    return NextResponse.next();
+    return NextResponse.next();                 
   },
-  {
+  {                         
     callbacks: {
       authorized: ({ token }) => !!token,
     },
