@@ -9,7 +9,7 @@ type AppUser = {
   role?: 'USER' | 'ADMIN';
   plan?: 'FREE' | 'PRO' | 'TEAM';
   status?: 'ACTIVE' | 'BANNED';
-  avatar?: string;
+  avatar?: string;                                                
   bio?: string;
   createdAt?: string;
   updatedAt?: string;
