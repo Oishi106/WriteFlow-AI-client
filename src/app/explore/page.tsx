@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Search, Star, XCircle } from 'lucide-react';
 import { itemsApi } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -254,13 +253,14 @@ export default function ExplorePage() {
                       key={template._id}
                       className="group bg-card border border-border rounded-2xl overflow-hidden hover:border-brand-500/30 card-hover flex flex-col"
                     >
-                      <div className="relative h-40 w-full bg-muted">
-                        <Image
-                          src={template.image || '/placeholder.jpg'}
+                      <div className="h-40 w-full bg-muted overflow-hidden">
+                        <img
+                          src={template.image || 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80'}
                           alt={template.title}
-                          fill
-                          className="object-cover"
-                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80';
+                          }}
                         />
                       </div>
                       <div className="p-5 flex flex-col flex-1">

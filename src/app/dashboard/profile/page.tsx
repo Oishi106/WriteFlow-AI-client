@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import { FileText, Loader2, Sparkles, Calendar, Camera } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { ApiError, ailogsApi, dashboardApi, documentsApi, usersApi } from '@/lib/api';
@@ -325,13 +324,15 @@ export default function ProfilePage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 pb-6 border-b border-border">
           <div className="relative flex-shrink-0">
             {displayAvatar ? (
-              <Image
-                src={displayAvatar}
+              <img
+                src={displayAvatar || 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80'}
                 alt={headerName || 'Avatar'}
                 width={80}
                 height={80}
                 className="rounded-full object-cover border-2 border-border"
-                unoptimized={displayAvatar.startsWith('blob:')}
+                onError={(e) => {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80';
+                }}
               />
             ) : (
               <div className="w-20 h-20 bg-brand-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">
@@ -380,13 +381,15 @@ export default function ProfilePage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="relative">
               {displayAvatar ? (
-                <Image
-                  src={displayAvatar}
+                <img
+                  src={displayAvatar || 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80'}
                   alt="Avatar preview"
                   width={64}
                   height={64}
                   className="rounded-full object-cover border border-border"
-                  unoptimized={displayAvatar.startsWith('blob:')}
+                  onError={(e) => {
+                    e.currentTarget.src = 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80';
+                  }}
                 />
               ) : (
                 <div className="w-16 h-16 bg-brand-500/20 rounded-full flex items-center justify-center text-brand-500 text-xl font-bold">

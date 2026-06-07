@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { Star } from 'lucide-react';
 import { itemsApi } from '@/lib/api';
@@ -164,24 +163,15 @@ export default async function TemplateDetailsPage({ params }: { params: { id: st
         </nav>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-border bg-muted">
-            {resolvedImage ? (
-              <Image
-                src={resolvedImage}
-                alt={item.title}
-                fill
-                className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                priority
-              />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.image || '/placeholder.jpg'}
-                alt={item.title}
-                className="w-full h-full object-cover"
-              />
-            )}
+          <div className="h-72 w-full rounded-2xl overflow-hidden border border-border bg-muted">
+            <img
+              src={resolvedImage || item.image || 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80'}
+              alt={item.title}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80';
+              }}
+            />
           </div>
 
           <div className="space-y-4">
@@ -274,13 +264,14 @@ export default async function TemplateDetailsPage({ params }: { params: { id: st
                   href={`/items/${relatedItem._id}`}
                   className="border border-border rounded-xl p-4 bg-card hover:border-brand-500/40 transition-colors"
                 >
-                  <div className="relative h-28 w-full rounded-lg overflow-hidden bg-muted mb-3">
-                    <Image
-                      src={relatedItem.image || '/placeholder.jpg'}
+                  <div className="h-28 w-full rounded-lg overflow-hidden bg-muted mb-3">
+                    <img
+                      src={relatedItem.image || 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80'}
                       alt={relatedItem.title}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 1024px) 100vw, 25vw"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80';
+                      }}
                     />
                   </div>
                   <p className="text-sm font-medium line-clamp-2">{relatedItem.title}</p>

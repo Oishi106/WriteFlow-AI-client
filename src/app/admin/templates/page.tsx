@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import Image from 'next/image';
 import { Plus, Pencil, Trash2, Loader2, Star } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -328,16 +327,13 @@ export default function AdminTemplatesPage() {
               templates.map((item) => (
                 <TableRow key={item._id} className="hover:bg-muted/10 transition-colors">
                   <TableCell>
-                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border bg-muted flex-shrink-0">
-                      <Image
-                        src={item.thumbnailUrl || DEFAULT_IMAGE_FALLBACK}
+                    <div className="w-12 h-12 rounded-lg overflow-hidden border border-border bg-muted flex-shrink-0">
+                      <img
+                        src={item.thumbnailUrl || 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80'}
                         alt={item.title}
-                        fill
-                        sizes="48px"
-                        className="object-cover"
-                        unoptimized
+                        className="w-full h-full object-cover"
                         onError={(e) => {
-                          (e.target as any).src = DEFAULT_IMAGE_FALLBACK;
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&q=80';
                         }}
                       />
                     </div>

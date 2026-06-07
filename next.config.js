@@ -4,6 +4,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 const nextConfig = {
   reactStrictMode: true,
   images: {
+    unoptimized: true,
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
