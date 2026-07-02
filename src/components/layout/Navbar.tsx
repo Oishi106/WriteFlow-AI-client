@@ -9,9 +9,11 @@ import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 
+
+
 const publicNavLinks = [
   { href: '/', label: 'Home' },
-  { href: '/explore', label: 'Explore' },
+  { href: '/explore', label: 'Explore' },             
   { href: '/blog', label: 'Blog' },
   { href: '/about', label: 'About' },
   { href: '/contact', label: 'Contact' },
