@@ -117,7 +117,7 @@ export default function Navbar() {
                       <p className="text-sm font-medium truncate">{user?.email}</p>
                     </div>
 
-                    
+
                     <Link href="/dashboard/profile" className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors" onClick={() => setProfileOpen(false)}>
                       <User className="w-4 h-4" /> Profile
                     </Link>
@@ -137,13 +137,15 @@ export default function Navbar() {
                   </div>
                 )}
               </div>
-            ) : (
+
+
+            ) : (           
               <>
                 <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                   Sign in
                 </Link>
-                <Link
-                  href="/register"
+                <Link                       
+                  href="/register"           
                   className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   Start Free
