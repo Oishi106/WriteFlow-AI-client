@@ -145,7 +145,7 @@ export default function Navbar() {
                   Sign in
                 </Link>
                 <Link                       
-                  href="/register"           
+                  href="/register"                         
                   className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors"
                 >
                   Start Free

@@ -12,11 +12,11 @@ export default function AuthSync() {
   useEffect(() => {
     if (status === 'loading') {
       return;
-    }
+    }                                   
 
     if (isLoggingOut) {
       if (status === 'unauthenticated') {
-        syncSession(null);
+        syncSession(null);                       
       }
       return;
     }
